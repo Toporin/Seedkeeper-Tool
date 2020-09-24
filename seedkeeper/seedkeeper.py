@@ -55,7 +55,7 @@ secret= [len(secret)]+secret
 secret_type= 0x30
 export_rights= 0x01
 label= 127*"A"
-(id, fingerprint)=  cc.seedkeeper_import_plain_secret(secret_type, export_rights, label, secret)
+#(id, fingerprint)=  cc.seedkeeper_import_plain_secret(secret_type, export_rights, label, secret)
 logger.debug("\n\n\n")
 
 # bip39="A"
@@ -82,7 +82,8 @@ logger.debug("\n\n\n")
 
 cc.seedkeeper_list_secret_headers()
 logger.debug("\n\n\n")
-    
+
+#cc.seedkeeper_print_logs(True)
     
 # except Exception as e:
     # #cc.client.request('show_error','[handleConnected] Exception:'+repr(e))
