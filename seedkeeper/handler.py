@@ -284,6 +284,7 @@ class HandlerSimpleGUI:
             [sg.Text('Label: ', size=(10, 1)), sg.Text(key='label')],
             [sg.Text('Fingerprint: ', size=(10, 1)), sg.Text(key='fingerprint')],
             [sg.Text('Type: ', size=(10, 1)), sg.Text(key='type')],
+            [sg.Text('Origin: ', size=(10, 1)), sg.Text(key='origin')],
             #[sg.Text(key='secret_field', size=(10, 1)), sg.Text(key='secret')],
             #[sg.Text('Secret: ', key='secret_field', size=(10, 1)), sg.InputText(key='secret')],
             #[sg.Text('Secret: ', key='secret_field', size=(10, 1)), sg.Multiline(key='secret', size=(20, 3) )],
@@ -308,6 +309,14 @@ class HandlerSimpleGUI:
                     #window['type'].update(secret_dict['type'])      
                     window['fingerprint'].update(secret_dict['fingerprint'])      
                     window['label'].update(secret_dict['label'])      
+                    if secret_dict['origin']==0x01:
+                        window['origin'].update('Plain import')      
+                    elif secret_dict['origin']==0x02:
+                        window['origin'].update('Secure import')   
+                    elif secret_dict['origin']==0x03:
+                        window['origin'].update('Generated on card')   
+                    else:
+                        window['origin'].update('Unknown')   
                     #TODO: parse secret depending to type for all cases (in CardDataParser?)
                     secret_list= secret_dict['secret']
                     secret_size= secret_list[0]
@@ -319,12 +328,13 @@ class HandlerSimpleGUI:
                         window['secret'].update(secret)    
                     elif (secret_dict['type']== 0x30): #BIP39
                         secret1= bytes(secret_raw).decode('utf-8')
-                        secret_size2= secret_list[1+secret_size]
-                        secret_raw2= secret_list[2+secret_size:2+secret_size+secret_size2]
-                        secret2= bytes(secret_raw2).decode('utf-8')
                         secret= "BIP39: " + secret1
-                        if len(secret2)>0:
-                            secret+= "\n" + "Passphrase: " + secret2
+                        if len(secret_list)>=(2+secret_size): #passphrase
+                            secret_size2= secret_list[1+secret_size]
+                            secret_raw2= secret_list[2+secret_size:2+secret_size+secret_size2]
+                            secret2= bytes(secret_raw2).decode('utf-8')
+                            if len(secret2)>0:
+                                secret+= "\n" + "Passphrase: " + secret2
                         window['type'].update('BIP39') 
                         #window['secret_field'].update('BIP39: ')    
                         window['secret'].update(secret)    
@@ -389,16 +399,18 @@ class HandlerSimpleGUI:
         txt+= f'Number of secrets stored: {len(headers)} \n\n'
         
         for header in headers:
-            id= str(header['id'])
+            sid= str(header['id'])
             stype= hex(header['type'])
+            origin= hex(header['origin'])
             export_rights= str(header['export_rights'])
             export_nbplain= str(header['export_nbplain'])
             export_nbsecure= str(header['export_nbsecure'])
             fingerprint= header['fingerprint']
             label= header['label']
             
-            txt+= f'id: {id} - '
+            txt+= f'id: {sid} - '
             txt+= f'type: {stype} - '
+            txt+= f'origin: {origin} - '
             txt+= f'export_rights: {export_rights} - '
             txt+= f'export_nbplain: {export_nbplain} - '
             txt+= f'export_nbsecure: {export_nbsecure} - '

@@ -59,7 +59,7 @@ class SeedKeeperTest(unittest.TestCase):
         cls.INS_EXPORT_PLAIN_SECRET= 0xA2
         cls.INS_VERIFY_PIN= 0x42
         #initialize list of secrets
-        cls.id=[]
+        cls.sid=[]
         cls.pin= list(bytes("123456", "utf-8"))
         cls.wrong_pin= list(bytes("0000", "utf-8"))
         
@@ -135,12 +135,12 @@ class SeedKeeperTest(unittest.TestCase):
 ##############
 
     def test_generate_masterseed(self):
-        id=0
+        sid=0
         seed_size= range(16, 65, 16) #64
         for size in seed_size:
             export_rights= 0x01
             label= "Test: Mymasterseed  "+ str(size) + "bytes export-allowed"
-            (response, sw1, sw2, id, fingerprint)= SeedKeeperTest.cc.seedkeeper_generate_masterseed(size, export_rights, label)
+            (response, sw1, sw2, sid, fingerprint)= SeedKeeperTest.cc.seedkeeper_generate_masterseed(size, export_rights, label)
             self.assertEqual(sw1, 0x90)
             self.assertEqual(sw2, 0x00)
             
@@ -151,18 +151,19 @@ class SeedKeeperTest(unittest.TestCase):
             (ins, id1, id2, res)= last_log
             self.assertEqual(len(last_log), SeedKeeperTest.LOG_SIZE)
             self.assertEqual(ins, SeedKeeperTest.INS_GENERATE_MASTERSEED)
-            self.assertEqual(id1, id)
+            self.assertEqual(id1, sid)
             self.assertEqual(id2, 0)
             self.assertEqual(res, 0x9000)
             
             # check fingerprint and export secret
-            dict= SeedKeeperTest.cc.seedkeeper_export_plain_secret(id)
-            self.assertEqual(dict['id'], id)
-            self.assertEqual(dict['type'], 0x10)
-            self.assertEqual(dict['export_rights'], export_rights)
-            self.assertEqual(dict['fingerprint'], fingerprint) 
-            self.assertEqual(dict['label'], label) 
-            SeedKeeperTest.id+=[id]
+            sdict= SeedKeeperTest.cc.seedkeeper_export_plain_secret(sid)
+            self.assertEqual(sdict['id'], sid)
+            self.assertEqual(sdict['type'], 0x10)
+            self.assertEqual(sdict['origin'], 0x03)
+            self.assertEqual(sdict['export_rights'], export_rights)
+            self.assertEqual(sdict['fingerprint'], fingerprint) 
+            self.assertEqual(sdict['label'], label) 
+            SeedKeeperTest.sid+=[sid]
                 
             # test logs
             (logs, nbtotal_logs, nbavail_logs)= SeedKeeperTest.cc.seedkeeper_print_logs(False)
@@ -171,7 +172,7 @@ class SeedKeeperTest(unittest.TestCase):
             (ins, id1, id2, res)= last_log
             self.assertEqual(len(last_log), SeedKeeperTest.LOG_SIZE)
             self.assertEqual(ins, SeedKeeperTest.INS_EXPORT_PLAIN_SECRET)
-            self.assertEqual(id1, id)
+            self.assertEqual(id1, sid)
             self.assertEqual(id2, 0)
             self.assertEqual(res, 0x9000)
         
@@ -188,16 +189,17 @@ class SeedKeeperTest(unittest.TestCase):
             secret_type= 0x30
             export_rights= 0x01
             label= "Test: BIP39 seed with " + str(len(bip39.split(' '))) + " words export-allowed"
-            (id, fingerprint)=  SeedKeeperTest.cc.seedkeeper_import_plain_secret(secret_type, export_rights, label, secret)
+            (sid, fingerprint)=  SeedKeeperTest.cc.seedkeeper_import_plain_secret(secret_type, export_rights, label, secret)
             
-            dict= SeedKeeperTest.cc.seedkeeper_export_plain_secret(id)
-            self.assertEqual(dict['id'], id)
-            self.assertEqual(dict['type'], secret_type)
-            self.assertEqual(dict['export_rights'], export_rights)
-            self.assertEqual(dict['fingerprint'], fingerprint) 
-            self.assertEqual(dict['label'], label) 
-            self.assertEqual(dict['secret'], secret) 
-            SeedKeeperTest.id+=[id]
+            sdict= SeedKeeperTest.cc.seedkeeper_export_plain_secret(sid)
+            self.assertEqual(sdict['id'], sid)
+            self.assertEqual(sdict['type'], secret_type)
+            self.assertEqual(sdict['origin'], 0x01)
+            self.assertEqual(sdict['export_rights'], export_rights)
+            self.assertEqual(sdict['fingerprint'], fingerprint) 
+            self.assertEqual(sdict['label'], label) 
+            self.assertEqual(sdict['secret'], secret) 
+            SeedKeeperTest.sid+=[sid]
             
             # TODO: try  to export non existent id
             
@@ -208,14 +210,14 @@ class SeedKeeperTest(unittest.TestCase):
             (ins, id1, id2, res)= exp_log
             self.assertEqual(len(exp_log), SeedKeeperTest.LOG_SIZE)
             self.assertEqual(ins, SeedKeeperTest.INS_EXPORT_PLAIN_SECRET)
-            self.assertEqual(id1, id)
+            self.assertEqual(id1, sid)
             self.assertEqual(id2, 0)
             self.assertEqual(res, 0x9000)
             imp_log= logs[1]
             (ins, id1, id2, res)= imp_log
             self.assertEqual(len(imp_log), SeedKeeperTest.LOG_SIZE)
             self.assertEqual(ins, SeedKeeperTest.INS_IMPORT_PLAIN_SECRET)
-            self.assertEqual(id1, id)
+            self.assertEqual(id1, sid)
             self.assertEqual(id2, 0)
             self.assertEqual(res, 0x9000)
             
