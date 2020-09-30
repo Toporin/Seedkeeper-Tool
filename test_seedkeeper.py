@@ -162,6 +162,8 @@ class SeedKeeperTest(unittest.TestCase):
             self.assertEqual(sdict['origin'], 0x03)
             self.assertEqual(sdict['export_rights'], export_rights)
             self.assertEqual(sdict['fingerprint'], fingerprint) 
+            self.assertEqual(sdict['rfu1'], 0x00) 
+            self.assertEqual(sdict['rfu2'], 0x00) 
             self.assertEqual(sdict['label'], label) 
             SeedKeeperTest.sid+=[sid]
                 
@@ -197,6 +199,8 @@ class SeedKeeperTest(unittest.TestCase):
             self.assertEqual(sdict['origin'], 0x01)
             self.assertEqual(sdict['export_rights'], export_rights)
             self.assertEqual(sdict['fingerprint'], fingerprint) 
+            self.assertEqual(sdict['rfu1'], 0x00) 
+            self.assertEqual(sdict['rfu2'], 0x00) 
             self.assertEqual(sdict['label'], label) 
             self.assertEqual(sdict['secret'], secret) 
             SeedKeeperTest.sid+=[sid]
