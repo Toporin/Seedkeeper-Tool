@@ -199,6 +199,8 @@ class SeedKeeperTest(unittest.TestCase):
             self.assertEqual(dict['secret'], secret) 
             SeedKeeperTest.id+=[id]
             
+            # TODO: try  to export non existent id
+            
             # test SeedKeeper logging
             (logs, nbtotal_logs, nbavail_logs)= SeedKeeperTest.cc.seedkeeper_print_logs(True)
             self.assertTrue(len(logs)>=2)

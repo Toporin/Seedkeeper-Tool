@@ -7,17 +7,10 @@ from pysatochip.CardConnector import CardConnector, UninitializedSeedError
 from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
+from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-MSG_USE_2FA= ("Do you want to use 2-Factor-Authentication (2FA)?\n\n"
-                "With 2FA, any transaction must be confirmed on a second device such as \n"
-               "your smartphone. First you have to install the Satochip-2FA android app on \n"
-               "google play. Then you have to pair your 2FA device with your Satochip \n"
-               "by scanning the qr-code on the next screen. \n"
-               "Warning: be sure to backup a copy of the qr-code in a safe place, \n"
-               "in case you have to reinstall the app!")
                
 class Client:
 
@@ -29,9 +22,6 @@ class Client:
         self.queue_request= Queue()
         self.queue_reply= Queue()
         self.cc= cc
-       
-    def create_system_tray(self, card_present):
-        self.handler.system_tray(card_present)
     
     def request_threading(self, request_type, *args):
         logger.debug('Client request: '+ str(request_type))
@@ -151,7 +141,7 @@ class Client:
     ########################################
     
     def card_init_connect(self):
-        logger.info("ATR: "+str(self.cc.card_get_ATR()))
+        #logger.info("ATR: "+str(self.cc.card_get_ATR()))
         #response, sw1, sw2 = self.card_select() #TODO: remove?
         
         # check setup
@@ -165,9 +155,9 @@ class Client:
                 v_applet= d["protocol_version"] 
                 logger.info(f"Satochip version={hex(v_applet)} Electrum supported version= {hex(v_supported)}")#debugSatochip
                 if (v_supported<v_applet):
-                    msg=(('The version of your Satochip is higher than supported by Electrum. You should update Electrum to ensure correct functioning!')+ '\n' 
-                                + f'    Satochip version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
-                                + f'    Supported version: {SATOCHIP_PROTOCOL_MAJOR_VERSION}.{SATOCHIP_PROTOCOL_MINOR_VERSION}')
+                    msg=(('The version of your Satochip is higher than supported by SeedKeeper. You should update SeedKeeper to ensure correct functioning!')+ '\n' 
+                                + f'    SeedKeeper version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                + f'    Supported version: {SEEDKEEPER_PROTOCOL_MAJOR_VERSION}.{SEEDKEEPER_PROTOCOL_MINOR_VERSION}')
                     self.request('show_error', msg)
                 
                 if (self.cc.needs_secure_channel):
@@ -226,55 +216,121 @@ class Client:
         # get authentikey
         try:
             authentikey=self.cc.card_bip32_get_authentikey()
-        except UninitializedSeedError:
-            # Option: setup 2-Factor-Authentication (2FA)
-            self.init_2FA()
-                    
-            # seed dialog...
-            (mnemonic, passphrase, seed)= self.seed_wizard()                    
-            if seed:
-                seed= list(seed)
-                authentikey= self.cc.card_bip32_import_seed(seed)
-                if authentikey:
-                    self.request('show_success','Seed successfully imported to Satochip!')
-                    hex_authentikey= authentikey.get_public_key_hex(compressed=True)
-                    logger.info(f"Authentikey={hex_authentikey}")
-                else:
-                    self.request('show_error','Error when importing seed to Satochip!')
-            else: #if cancel
-                self.request('show_message','Seed import cancelled!')
+        except UninitializedSeedError as ex:
+            logger.warning(repr(ex))
+            self.request('show_error', repr(ex))
+            return
         
+############################
+#    SEED WIZARD
+############################    
+    def generate_seed(self):
+        event, values = self.handler.generate_new_seed()
         
-    def init_2FA(self):
-        logger.debug("In init_2FA")
-        if not self.cc.needs_2FA:
-            use_2FA=self.request('yes_no_question', MSG_USE_2FA)
-            if (use_2FA):
-                secret_2FA= urandom(20)
-                secret_2FA_hex=secret_2FA.hex()
-                amount_limit= 0 # i.e. always use 
-                try:
-                    # the secret must be shared with the second factor app (eg on a smartphone)
-                    msg= 'Scan this QR code on your second device \nand securely save a backup of this 2FA-secret: \n'+secret_2FA_hex
-                    (event, values)= self.request('QRDialog', secret_2FA_hex, None, "Satochip-Bridge: QR Code", True, msg)
-                    if event=='Ok':
-                        # further communications will require an id and an encryption key (for privacy). 
-                        # Both are derived from the secret_2FA using a one-way function inside the Satochip
-                        (response, sw1, sw2)=self.cc.card_set_2FA_key(secret_2FA, amount_limit)
-                        if sw1!=0x90 or sw2!=0x00:                 
-                            logger.warning("Unable to set 2FA!  sw12="+hex(sw1)+" "+hex(sw2))#debugSatochip
-                            self.request('show_error', 'Unable to setup 2FA with error code:'+hex(sw1)+' '+hex(sw2))
-                            #raise RuntimeError('Unable to setup 2FA with error code:'+hex(sw1)+' '+hex(sw2))
-                        else:
-                            self.request('show_success', '2FA enabled successfully!')
-                    else: # Cancel
-                        self.request('show_message', '2FA activation canceled!')
-                except Exception as e:
-                    logger.warning("Exception during 2FA activation: "+str(e))    
-                    self.request('show_error', 'Exception during 2FA activation: '+str(e))
-        else:
-            self.request('show_message', '2FA is already activated!')
+        if event== 'Submit':
+            logger.debug(values)
+            label= values['label']
+            export_rights= 0x01 if (values['export_rights']=='Export in clear allowed') else 0x02
+            size= int(values['size'].split(' ')[0])
             
+            (response, sw1, sw2, id, fingerprint)= self.cc.seedkeeper_generate_masterseed(size, export_rights, label)
+            
+            if (sw1==0x90 and sw2==0x00):
+                self.handler.show_success(f'Seed generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
+            elif (sw1==0x9c and sw2==0x01):
+                self.handler.show_error(f'Error during seed generation: no memory available!')
+            elif (sw1==0x9c and sw2==0x04):
+                self.handler.show_error(f'Error during seed generation: SeedKeeper is not initialized!')
+            else:
+                self.handler.show_error(f'Unknown error: sw1={hex(sw1)} sw2={hex(sw2)}')
+        else:
+            #cancel or None
+            return
+    
+    
+    def import_secret(self):
+        
+        event, values = self.handler.import_secret_menu()
+        
+        if event == 'Submit':
+            dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Public Key':0x70, 'Password':0x90}
+            stype= values['type']
+            itype= dic_type[stype]
+            label= values['label']
+            dic_export_rights={'Export in clear allowed':0x01 , 'Export encrypted only':0x02}
+            export_rights= dic_export_rights[values['export_rights']]
+            
+            if stype== 'BIP39 seed':
+                (mnemonic, passphrase, seed)= self.seed_wizard() #todo: check None
+                if mnemonic is None:
+                    self.handler.show_message(f"Secret import aborted!")
+                    return None
+                mnemonic_list= list(mnemonic.encode("utf-8"))
+                passphrase_list= list(passphrase.encode('utf-8'))
+                secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+                try:
+                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    return sid
+                except Exception as ex:
+                    logger.error(f"Error during secret import: {ex}")
+                    self.handler.show_error(f"Error during secret import: {ex}")
+                    return None
+                
+            elif stype== 'Electrum seed':
+                #TODO adapt wizard for electrum seeds?
+                self.handler.show_error(f"Not implement yet!")
+                return None
+                
+            elif stype== 'MasterSeed':
+                event, values= self.handler.import_secret_masterseed()
+                if event == 'Submit':
+                    masterseed= values['masterseed']
+                    logger.debug(masterseed) #debug
+                    masterseed_list= list( bytes.fromhex(masterseed) )
+                    secret= [len(masterseed_list)] + masterseed_list
+                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    return sid
+                else:
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+                    
+            elif stype== 'Public Key':
+                event, values= self.handler.import_secret_pubkey()
+                if event == 'Submit':
+                    pubkey= values['pubkey']
+                    pubkey_list= list( bytes.fromhex(pubkey) )
+                    secret= [len(pubkey_list)] + pubkey_list
+                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    return sid
+                else:
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+                
+            elif stype== 'Password':
+                event, values= self.handler.import_secret_password()
+                if event == 'Submit':
+                    password= values['password']
+                    password_list= list( password.encode('utf-8') )
+                    secret= [len(password_list)] + password_list
+                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    return sid
+                else:
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+                
+            else:
+                #should not happen
+                logger.error(f'In import_secret: wrong type for import: {stype}')
+                return None
+            
+        else: 
+            return None
+        
+
     def seed_wizard(self): 
         logger.debug("In seed_wizard()") #debugSatochip
             
@@ -379,4 +435,6 @@ class Client:
         #print('seed: '+str(seed.hex()))
         
         return (mnemonic, passphrase, seed)
+ 
+ 
  

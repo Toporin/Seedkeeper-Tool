@@ -28,93 +28,35 @@ logger = logging.getLogger(__name__)
 
 logger.warning("loglevel: "+ str(logger.getEffectiveLevel()) )
 
-handler= HandlerTxt()
-#handler= HandlerSimpleGUI(logger.getEffectiveLevel())
+#handler= HandlerTxt()
+handler= HandlerSimpleGUI(logger.getEffectiveLevel())
 client= Client(None, handler, logger.getEffectiveLevel())
 cc = CardConnector(client, logger.getEffectiveLevel())
 time.sleep(1) # give some time to initialize reader...
 
-#try:
-cc.client.card_init_connect()
-logger.debug("\n\n\n")
+################
 
-#cc.seedkeeper_list_secret_headers()
-logger.debug("\n\n\n")
+client.card_init_connect()
 
-id=0
-seed_size= 64
-export_rights= 0x01
-label= "My masterseed #12 32bytes export allowed"
-#(response, sw1, sw2, id)= cc.seedkeeper_generate_masterseed(seed_size, export_rights, label)
-logger.debug("\n\n\n")
+while(True):
+    event= handler.main_menu()
+    logger.debug("Event: "+ str(event))
 
-#bip39= "chunk hat mirror there suit burst salute patch trumpet drastic spare pilot laptop smile hurry bleak friend rude divide melody iron fame dynamic parrot"
-bip39= 255*"Z"
-secret= list(bip39.encode("utf-8"))
-secret= [len(secret)]+secret
-secret_type= 0x30
-export_rights= 0x01
-label= 127*"A"
-#(id, fingerprint)=  cc.seedkeeper_import_plain_secret(secret_type, export_rights, label, secret)
-logger.debug("\n\n\n")
-
-# bip39="A"
-# while(True):
-    # secret= list(bip39.encode("utf-8"))
-    # secret= [len(secret)]+secret
-    # secret_type= 0x30
-    # export_rights= 0x01
-    # label= "test"
-    # (id, fingerprint)=  cc.seedkeeper_import_plain_secret(secret_type, export_rights, label, secret)
-    # logger.debug("--------------------------------------------------------------------------------------------------------------------")
-    # secret_dic=cc.seedkeeper_export_plain_secret(id)
-    # logger.debug("==========================================================")
-    # bip39+="A"
-
-logger.debug("\n\n\n")
-    
-    
-    
-#secret_dic=cc.seedkeeper_export_plain_secret(id)
-logger.debug("\n\n\n")
-
-
-
-cc.seedkeeper_list_secret_headers()
-logger.debug("\n\n\n")
-
-#cc.seedkeeper_print_logs(True)
-    
-# except Exception as e:
-    # #cc.client.request('show_error','[handleConnected] Exception:'+repr(e))
-    # logger.warning('Exception:'+repr(e))
-
-
-
-## TEST TODO ###
-# Check integrity import => export
-# test max size
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    if event == 'Generate a new seed':
+        client.generate_seed()    
+    elif  event == 'Import a Secret':
+        client.import_secret()
+    elif event == 'Export a Secret':
+        handler.export_secret()
+    elif event == 'List Secrets':
+        handler.list_headers()
+    elif event == 'Get logs':
+        handler.logs_menu()
+    elif event == 'About':
+        handler.about_menu()
+    elif event == 'Quit':
+        break;
+    else: 
+        logger.debug("Unknown event: "+ str(event))
+        break;
 

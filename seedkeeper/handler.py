@@ -11,8 +11,10 @@ import logging
 from queue import Queue 
 
 from pysatochip.Satochip2FA import Satochip2FA
-from pysatochip.CardConnector import CardConnector, UninitializedSeedError
+from pysatochip.CardConnector import CardConnector
+from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperExportNotAllowedError, SeedKeeperObjectNotFoundError, UnexpectedSW12Error
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
+from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -112,7 +114,7 @@ class HandlerSimpleGUI:
         #window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=SatochipBase64)    #NOK
         window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=self.satochip_icon)  #ok
         #window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon="satochip.ico")    #ok
-        event, value = window.read()    
+        event, values = window.read()    
         window.close()  
         del window
         
@@ -137,7 +139,357 @@ class HandlerSimpleGUI:
         # logger.debug("Type of pin from getpass:"+str(type(pin)))
         # logger.debug("Type of event from getpass:"+str(type(event))+str(event))
         return (is_PIN, pin)
+     
+####################################
+#            SEEDKEEPER                               
+####################################
+
+    def main_menu(self):
+        logger.debug('In main_menu')
+        layout = [[sg.Text('Welcome to SeedKeeper Utility !')],      
+                        [sg.Button('Generate a new seed')],
+                        [sg.Button('Import a Secret')],
+                        [sg.Button('Export a Secret')],
+                        [sg.Button('List Secrets')],
+                        [sg.Button('Get logs')],
+                        [sg.Button('About')],
+                        [sg.Button('Quit')],
+                    ]      
+        window = sg.Window('SeedKeeper utility', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
         
+        logger.debug("Type of event from getpass:"+str(type(event))+str(event))
+        return event
+        
+    def generate_new_seed(self):
+        logger.debug('In generate_new_seed')
+        layout = [
+            [sg.Text('Please enter seed settings below: ')],
+            [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(20, 1))],
+            [sg.Text('Size: ', size=(10, 1)), sg.InputCombo(('16 bytes' , '32 bytes', '48 bytes', '64 bytes'), key='size', size=(20, 1))],
+            [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in clear allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
+            [sg.Submit(), sg.Cancel()]
+        ]   
+        window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=self.satochip_icon)  #ok
+
+        event, values = window.read()    
+        window.close()  
+        del window
+        
+        logger.debug("Type of event from getpass:"+str(type(event))+str(event))
+        logger.debug("Type of values from getpass:"+str(type(values))+str(values))
+        return event, values
+    
+    def import_secret_menu(self):
+        logger.debug('In import_secret_menu')
+        layout = [
+            [sg.Text('Choose the type of secret you wish to import: ', size=(40, 1))],
+            [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(20, 1))],
+            [sg.Text('Type: ', size=(10, 1)), sg.InputCombo(('BIP39 seed', 'Electrum seed', 'MasterSeed', 'Public Key', 'Password'), key='type', size=(20, 1))],
+            [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in clear allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
+            [sg.Submit(), sg.Cancel()]
+        ] 
+        window = sg.Window('SeedKeeper: import secret - Step 1', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
+        
+        return event, values
+        
+    def import_secret_masterseed(self):    
+        logger.debug("import_secret_masterseed")
+        
+        layout = [
+            [sg.Text('Enter the masterseed as a hex string with 32, 64, 96 or 128 characters: ', size=(40, 1))],
+            [sg.Text('Hex value: ', size=(10, 1)), sg.InputText(key='masterseed', size=(40, 1))],
+            [sg.Text(size=(40,1), key='-OUTPUT-')],
+            [sg.Submit(), sg.Cancel()],
+        ] 
+        window = sg.Window('SeedKeeper: import secret - Step 2', layout, icon=self.satochip_icon)  #ok
+        #event, values=None, None
+        while True:                             
+            event, values = window.read() 
+            if event == None or event == 'Cancel':
+                break      
+            elif event == 'Submit':    
+                try:
+                    masterseed= values['masterseed']
+                    int(masterseed, 16) # check if correct hex
+                    masterseed= masterseed[masterseed.startswith("0x") and len("0x"):] #strip '0x' if need be
+                    if len(masterseed) not in [32, 64, 96, 128]:
+                        raise ValueError(f"Wrong seed length: {len(masterseed)}")
+                    values['masterseed']= masterseed
+                    break
+                except ValueError as ex: # wrong hex value
+                    window['-OUTPUT-'].update(str(ex)) #update('Error: seed should be an hex string with the correct length!')
+                
+        window.close()
+        del window
+        return event, values
+     
+    def import_secret_pubkey(self):    
+        logger.debug("import_secret_pubkey")
+        layout = [
+            [sg.Text('Enter the pubkey as a hex string: ', size=(40, 1))],
+            [sg.Text('Hex value: ', size=(10, 1)), sg.InputText(key='pubkey', size=(68, 1))],
+            [sg.Text(size=(64,1), key='-OUTPUT-')],
+            [sg.Submit(), sg.Cancel()],
+        ] 
+        window = sg.Window('SeedKeeper: import secret - Step 2', layout, icon=self.satochip_icon)  #ok
+        #event, values=None, None
+        while True:                             
+            event, values = window.read() 
+            if event == None or event == 'Cancel':
+                break      
+            elif event == 'Submit':    
+                try:
+                    pubkey= values['pubkey']
+                    int(pubkey, 16) # check if correct hex
+                    pubkey= pubkey[pubkey.startswith("0x") and len("0x"):] #strip '0x' if need be
+                    if len(pubkey) not in [66, 130]:
+                        raise ValueError(f"Wrong pubkey length: {len(pubkey)} (should be 66 or 130 hex characters)")
+                    elif len(pubkey)== 130 and not pubkey.startswith("04"):
+                        raise ValueError(f"Wrong pubkey: uncompressed pubkey should start with '04' ")
+                    elif len(pubkey)== 66 and not ( pubkey.startswith("02") or pubkey.startswith("03") ):
+                        raise ValueError(f"Wrong pubkey: compressed pubkey should start with '02' or '03' ")
+                    break
+                except ValueError as ex: # wrong hex value
+                    window['-OUTPUT-'].update(str(ex)) #update('Error: seed should be an hex string with the correct length!')
+                
+        window.close()
+        del window
+        return event, values
+        
+    def import_secret_password(self):    
+        logger.debug("import_secret_password")
+        
+        layout = [
+            [sg.Text('Enter the password: ', size=(40, 1))],
+            [sg.Text('Password: ', size=(10, 1)), sg.InputText(key='password', size=(30, 1))],
+            [sg.Text(size=(40,1), key='-OUTPUT-')],
+            [sg.Submit(), sg.Cancel()],
+        ] 
+        window = sg.Window('SeedKeeper: import secret - Step 2', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
+        return event, values
+        
+    def export_secret(self):
+        logger.debug('In export_secret')
+        layout = [
+            [sg.Text('Id of the secret to export: '), sg.InputText(key='id', size=(10, 1))],
+            [sg.Text('Label: ', size=(10, 1)), sg.Text(key='label')],
+            [sg.Text('Fingerprint: ', size=(10, 1)), sg.Text(key='fingerprint')],
+            [sg.Text('Type: ', size=(10, 1)), sg.Text(key='type')],
+            #[sg.Text(key='secret_field', size=(10, 1)), sg.Text(key='secret')],
+            #[sg.Text('Secret: ', key='secret_field', size=(10, 1)), sg.InputText(key='secret')],
+            #[sg.Text('Secret: ', key='secret_field', size=(10, 1)), sg.Multiline(key='secret', size=(20, 3) )],
+            [sg.Multiline(key='secret', size=(40, 3) )],
+            #[sg.Text(key='option_field', size=(10, 1)), sg.Text(key='secret2')],
+            [sg.Button('Export', bind_return_key=True), sg.Cancel()]
+        ]   
+        
+        window = sg.Window('SeedKeeper export', layout)      
+        while True:      
+            event, values = window.read()      
+            logger.debug(f"event: {event}")
+            if event == 'Export':  #if event != 'Exit'  and event != 'Cancel':      
+                try:     
+                    sid= int(values['id'])
+                except Exception as ex:      
+                    self.show_error(f'Error during secret export: {ex}')
+                    continue
+                    
+                try: 
+                    secret_dict= self.client.cc.seedkeeper_export_plain_secret(sid)
+                    #window['type'].update(secret_dict['type'])      
+                    window['fingerprint'].update(secret_dict['fingerprint'])      
+                    window['label'].update(secret_dict['label'])      
+                    #TODO: parse secret depending to type for all cases (in CardDataParser?)
+                    secret_list= secret_dict['secret']
+                    secret_size= secret_list[0]
+                    secret_raw= secret_list[1:1+secret_size]
+                    if (secret_dict['type']== 0x10): #Masterseed
+                        secret= bytes(secret_raw).hex()
+                        window['type'].update('Masterseed')      
+                        #window['secret_field'].update('Masterseed: ')    
+                        window['secret'].update(secret)    
+                    elif (secret_dict['type']== 0x30): #BIP39
+                        secret1= bytes(secret_raw).decode('utf-8')
+                        secret_size2= secret_list[1+secret_size]
+                        secret_raw2= secret_list[2+secret_size:2+secret_size+secret_size2]
+                        secret2= bytes(secret_raw2).decode('utf-8')
+                        secret= "BIP39: " + secret1
+                        if len(secret2)>0:
+                            secret+= "\n" + "Passphrase: " + secret2
+                        window['type'].update('BIP39') 
+                        #window['secret_field'].update('BIP39: ')    
+                        window['secret'].update(secret)    
+                        #window['option_field'].update('Passphrase: ')    
+                        #window['secret2'].update(secret2)    
+                    elif (secret_dict['type']== 0x70): #pubkey
+                        secret= bytes(secret_raw).hex()
+                        window['type'].update('Pubkey') 
+                        #window['secret_field'].update('Pubkey: ')    
+                        window['secret'].update(secret)    
+                    elif (secret_dict['type']== 0x90): #password
+                        secret= bytes(secret_raw).decode('utf-8')
+                        window['type'].update('Password') 
+                        window['secret'].update(secret)   
+                        #window['secret_field'].update('Password: ')    
+                    else:
+                        secret= "Raw hex: "+secret_dict['secret_hex']
+                        #window['secret_field'].update('Secret: ')    
+                        window['type'].update('Unknown') 
+                        window['secret'].update(secret) 
+                        
+                except (SeedKeeperExportNotAllowedError, SeedKeeperObjectNotFoundError, UnexpectedSW12Error) as ex:
+                    #window['secret_field'].update('Secret: ')    
+                    window['secret'].update(str(ex))      
+                    window['type'].update("N/A")      
+                    window['fingerprint'].update("N/A")      
+                    window['label'].update("N/A")      
+                
+            else:      
+                break      
+            
+        window.close()  
+        del window
+    
+    def logs_menu(self):
+        logger.debug('In logs_menu')
+        (logs, nbtotal_logs, nbavail_logs)= self.client.cc.seedkeeper_print_logs(print_all=True)
+        #TODO: nice presentation instead of raw data
+        
+        txt= ''
+        txt+= f'Total number of events recorded: {nbtotal_logs} \n'
+        txt+= f'Number of records available: {nbavail_logs} \n\n'
+        
+        for log in logs:
+            txt+= str(log)+'\n'
+            
+        layout = [[sg.Multiline(txt, size=(45,20))],
+                      [sg.Button('Ok')],
+                    ]
+        window = sg.Window('SeedKeeperUtil Logs', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
+        
+    def list_headers(self):
+        logger.debug('In list_headers')
+        
+        headers =self.client.cc.seedkeeper_list_secret_headers()
+        #TODO: nice presentation instead of raw data
+        
+        txt= ''
+        txt+= f'Number of secrets stored: {len(headers)} \n\n'
+        
+        for header in headers:
+            id= str(header['id'])
+            stype= hex(header['type'])
+            export_rights= str(header['export_rights'])
+            export_nbplain= str(header['export_nbplain'])
+            export_nbsecure= str(header['export_nbsecure'])
+            fingerprint= header['fingerprint']
+            label= header['label']
+            
+            txt+= f'id: {id} - '
+            txt+= f'type: {stype} - '
+            txt+= f'export_rights: {export_rights} - '
+            txt+= f'export_nbplain: {export_nbplain} - '
+            txt+= f'export_nbsecure: {export_nbsecure} - '
+            txt+= f'fingerprint: {fingerprint} - '
+            txt+= f'label: {label} - '
+            txt+='\n'
+        
+        layout = [[sg.Multiline(txt, size=(45,20))],
+                      [sg.Button('Ok')],
+                    ]
+        window = sg.Window('SeedKeeperUtil Secret headers', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
+        
+    
+    def about_menu(self):
+        logger.debug('In about_menu')
+        msg_copyright= ''.join([ '(c)2020 - Satochip by Toporin - https://github.com/Toporin/ \n',
+                                                        "This program is licensed under the GNU Lesser General Public License v3.0 \n",
+                                                        "This software is provided 'as-is', without any express or implied warranty.\n",
+                                                        "In no event will the authors be held liable for any damages arising from \n"
+                                                        "the use of this software."])
+        #sw version
+        # v_supported= (CardConnector.SATOCHIP_PROTOCOL_MAJOR_VERSION<<8)+CardConnector.SATOCHIP_PROTOCOL_MINOR_VERSION
+        # sw_rel= str(CardConnector.SATOCHIP_PROTOCOL_MAJOR_VERSION) +'.'+ str(CardConnector.SATOCHIP_PROTOCOL_MINOR_VERSION)
+        v_supported= (SEEDKEEPER_PROTOCOL_MAJOR_VERSION<<8)+SEEDKEEPER_PROTOCOL_MINOR_VERSION
+        sw_rel= str(SEEDKEEPER_PROTOCOL_MAJOR_VERSION) +'.'+ str(SEEDKEEPER_PROTOCOL_MINOR_VERSION)
+        fw_rel= "N/A"
+        is_seeded= "N/A"
+        needs_2FA= "N/A"
+        needs_SC= "N/A"
+        msg_status= ("Card is not initialized! \nClick on 'Setup new Satochip' in the menu to start configuration.")
+            
+        (response, sw1, sw2, status)=self.client.cc.card_get_status()
+        if (sw1==0x90 and sw2==0x00):
+            #hw version
+            v_applet= (status["protocol_major_version"]<<8)+status["protocol_minor_version"] 
+            fw_rel= str(status["protocol_major_version"]) +'.'+ str(status["protocol_minor_version"] )
+            # status
+            if (v_supported<v_applet):
+                msg_status=(f'The version of your {self.client.cc.card_type}  is higher than supported. \nYou should update SeedKeeperUtil!')
+            else:
+                msg_status= 'SeedKeeperUtil is up-to-date'
+            # needs2FA?
+            if len(response)>=9 and response[8]==0X01: 
+                needs_2FA= "yes"
+            elif len(response)>=9 and response[8]==0X00: 
+                needs_2FA= "no"
+            else:
+                needs_2FA= "unknown"
+            #is_seeded?
+            if len(response) >=10:
+                is_seeded="yes" if status["is_seeded"] else "no" 
+            else: #for earlier versions
+                try: 
+                    self.client.cc.card_bip32_get_authentikey()
+                    is_seeded="yes"
+                except UninitializedSeedError:
+                    is_seeded="no"
+                except Exception:
+                    is_seeded="unknown"    
+            # secure channel
+            if status["needs_secure_channel"]:
+                needs_SC= "yes"
+            else:
+                needs_SC= "no"
+        else:
+            msg_status= 'No card found! please insert card!'
+            
+        frame_layout1= [[sg.Text('Supported Version: ', size=(20, 1)), sg.Text(sw_rel)],
+                                    [sg.Text('Firmware Version: ', size=(20, 1)), sg.Text(fw_rel)],
+                                    #[sg.Text('Wallet is seeded: ', size=(20, 1)), sg.Text(is_seeded)],
+                                    #[sg.Text('Requires 2FA: ', size=(20, 1)), sg.Text(needs_2FA)],
+                                    [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)]]
+        frame_layout2= [[sg.Text(msg_status, justification='center', relief=sg.RELIEF_SUNKEN)]]
+        frame_layout3= [[sg.Text(msg_copyright, justification='center', relief=sg.RELIEF_SUNKEN)]]
+        layout = [[sg.Frame('SeedKeeper', frame_layout1, font='Any 12', title_color='blue')],
+                      [sg.Frame('SeedKeeper status', frame_layout2, font='Any 12', title_color='blue')],
+                      [sg.Frame('About SeedKeeperUtil', frame_layout3, font='Any 12', title_color='blue')],
+                      [sg.Button('Ok')]]
+        
+        window = sg.Window('SeedKeeperUtil: About', layout, icon=self.satochip_icon)    
+        event, values = window.read()    
+        window.close()  
+        del window
+    
+####################################
+#            SATOCHIP                               
+####################################
+     
     def QRDialog(self, data, parent=None, title = "Satochip-Bridge: QR code", show_text=False, msg= ''):
         logger.debug('In QRDialog')
         import pyqrcode
@@ -334,231 +686,4 @@ class HandlerSimpleGUI:
             reply = method_to_call(*args)
             self.client.queue_reply.put((request_type, reply))
                 
-    # system tray   
-    def system_tray(self, card_present):
-        logger.debug('In system_tray')
-        self.menu_def = ['BLANK', ['&Setup new Satochip', '&Change PIN', '&Reset seed', '&Enable 2FA', '&About', '&Quit']]
-        
-        if card_present:
-            self.tray = sg.SystemTray(menu=self.menu_def, filename=self.satochip_icon) 
-        else:
-            self.tray = sg.SystemTray(menu=self.menu_def, filename=self.satochip_unpaired_icon) 
-
-        while True:
-            menu_item = self.tray.Read(timeout=1)
-            if menu_item != '__TIMEOUT__':
-                logger.debug('Menu item: '+menu_item) 
-            
-            ## Setup new Satochip ##
-            if menu_item== 'Setup new Satochip':
-                self.client.card_init_connect()
-            
-            ## Change PIN ##
-            elif menu_item== 'Change PIN':
-                msg_oldpin= ("Enter the current PIN for your Satochip:")
-                msg_newpin= ("Enter a new PIN for your Satochip:")
-                msg_confirm= ("Please confirm the new PIN for your Satochip:")
-                msg_error= ("The PIN values do not match! Please type PIN again!")
-                msg_cancel= ("PIN change cancelled!")
-                (is_PIN, oldpin, newpin)= self.client.PIN_change_dialog(msg_oldpin, msg_newpin, msg_confirm, msg_error, msg_cancel)
-                if not is_PIN:
-                    continue
-                else: 
-                    oldpin= list(oldpin)    
-                    newpin= list(newpin)  
-                    (response, sw1, sw2)= self.client.cc.card_change_PIN(0, oldpin, newpin)
-                    if (sw1==0x90 and sw2==0x00):
-                        msg= ("PIN changed successfully!")
-                        self.show_success(msg)
-                    else:
-                        msg= (f"Failed to change PIN with error code: {hex(sw1)}{hex(sw2)}")
-                        self.show_error(msg)
-             
-            ## Reset seed ##
-            elif menu_item== 'Reset seed':
-                msg = ''.join([
-                        ("WARNING!\n"),
-                        ("You are about to reset the seed of your Satochip. This process is irreversible!\n"),
-                        ("Please be sure that your wallet is empty and that you have a backup of the seed as a precaution.\n\n"),
-                        ("To proceed, enter the PIN for your Satochip:")
-                    ])
-                (event, values)= self.reset_seed_dialog(msg)
-                if event== 'Cancel':
-                    msg= ("Seed reset cancelled!")
-                    self.show_message(msg)
-                    continue
-                
-                pin= values['pin']
-                reset_2FA= values['reset_2FA']
-                pin= list(pin.encode('utf8'))
-                
-                # if 2FA is enabled, get challenge-response
-                hmac=[]
-                try: # todo: check if is_seeded
-                    self.client.cc.card_bip32_get_authentikey()
-                    self.client.cc.is_seeded=True
-                except UninitializedSeedError:
-                    self.client.cc.is_seeded=False
-                if self.client.cc.needs_2FA and self.client.cc.is_seeded: 
-                    # challenge based on authentikey
-                    authentikeyx= bytearray(self.client.cc.parser.authentikey_coordx).hex()
-                    
-                    # format & encrypt msg
-                    import json
-                    msg= {'action':"reset_seed", 'authentikeyx':authentikeyx}
-                    msg=  json.dumps(msg)
-                    (id_2FA, msg_out)= self.client.cc.card_crypt_transaction_2FA(msg, True)
-                    d={}
-                    d['msg_encrypt']= msg_out
-                    d['id_2FA']= id_2FA
-                    # logger.debug("encrypted message: "+msg_out)
-                    
-                    #do challenge-response with 2FA device...
-                    self.show_message('2FA request sent! Approve or reject request on your second device.')
-                    Satochip2FA.do_challenge_response(d)
-                    # decrypt and parse reply to extract challenge response
-                    try: 
-                        reply_encrypt= d['reply_encrypt']
-                    except Exception as e:
-                        self.show_error("No response received from 2FA...")
-                        continue
-                    reply_decrypt= self.client.cc.card_crypt_transaction_2FA(reply_encrypt, False)
-                    logger.debug("challenge:response= "+ reply_decrypt)
-                    reply_decrypt= reply_decrypt.split(":")
-                    chalresponse=reply_decrypt[1]
-                    hmac= list(bytes.fromhex(chalresponse))
-                
-                # send request 
-                (response, sw1, sw2) = self.client.cc.card_reset_seed(pin, hmac)
-                if (sw1==0x90 and sw2==0x00):
-                    msg= ("Seed reset successfully!\nYou can launch the wizard to setup your Satochip")
-                    self.show_success(msg)
-                else:
-                    msg= (f"Failed to reset seed with error code: {hex(sw1)}{hex(sw2)}")
-                    self.show_error(msg)
-                
-                # reset 2FA
-                if reset_2FA and self.client.cc.needs_2FA:     
-                    # challenge based on ID_2FA
-                    # format & encrypt msg
-                    import json
-                    msg= {'action':"reset_2FA"}
-                    msg=  json.dumps(msg)
-                    (id_2FA, msg_out)= self.client.cc.card_crypt_transaction_2FA(msg, True)
-                    d={}
-                    d['msg_encrypt']= msg_out
-                    d['id_2FA']= id_2FA
-                    # _logger.info("encrypted message: "+msg_out)
-                    
-                    #do challenge-response with 2FA device...
-                    self.client.handler.show_message('2FA request sent! Approve or reject request on your second device.')
-                    Satochip2FA.do_challenge_response(d)
-                    # decrypt and parse reply to extract challenge response
-                    try: 
-                        reply_encrypt= d['reply_encrypt']
-                    except Exception as e:
-                        self.show_error("No response received from 2FA...")
-                    reply_decrypt= self.client.cc.card_crypt_transaction_2FA(reply_encrypt, False)
-                    logger.debug("challenge:response= "+ reply_decrypt)
-                    reply_decrypt= reply_decrypt.split(":")
-                    chalresponse=reply_decrypt[1]
-                    hmac= list(bytes.fromhex(chalresponse))
-                    
-                    # send request 
-                    (response, sw1, sw2) = self.client.cc.card_reset_2FA_key(hmac)
-                    if (sw1==0x90 and sw2==0x00):
-                        self.client.cc.needs_2FA= False
-                        msg= ("2FA reset successfully!")
-                        self.show_success(msg)
-                    else:
-                        msg= (f"Failed to reset 2FA with error code: {hex(sw1)}{hex(sw2)}")
-                        self.show_error(msg)    
-            
-            ## Enable 2FA ##
-            elif menu_item== 'Enable 2FA':
-                self.client.init_2FA()
-                continue
-             
-            ## About ##
-            elif menu_item== 'About':
-                #copyright
-                msg_copyright= ''.join([ '(c)2020 - Satochip by Toporin - https://github.com/Toporin/ \n',
-                                                        "This program is licensed under the GNU Lesser General Public License v3.0 \n",
-                                                        "This software is provided 'as-is', without any express or implied warranty.\n",
-                                                        "In no event will the authors be held liable for any damages arising from \n"
-                                                        "the use of this software."])
-                #sw version
-                # v_supported= (CardConnector.SATOCHIP_PROTOCOL_MAJOR_VERSION<<8)+CardConnector.SATOCHIP_PROTOCOL_MINOR_VERSION
-                # sw_rel= str(CardConnector.SATOCHIP_PROTOCOL_MAJOR_VERSION) +'.'+ str(CardConnector.SATOCHIP_PROTOCOL_MINOR_VERSION)
-                v_supported= (SATOCHIP_PROTOCOL_MAJOR_VERSION<<8)+SATOCHIP_PROTOCOL_MINOR_VERSION
-                sw_rel= str(SATOCHIP_PROTOCOL_MAJOR_VERSION) +'.'+ str(SATOCHIP_PROTOCOL_MINOR_VERSION)
-                fw_rel= "N/A"
-                is_seeded= "N/A"
-                needs_2FA= "N/A"
-                needs_SC= "N/A"
-                msg_status= ("Card is not initialized! \nClick on 'Setup new Satochip' in the menu to start configuration.")
-                    
-                (response, sw1, sw2, status)=self.client.cc.card_get_status()
-                if (sw1==0x90 and sw2==0x00):
-                    #hw version
-                    v_applet= (status["protocol_major_version"]<<8)+status["protocol_minor_version"] 
-                    fw_rel= str(status["protocol_major_version"]) +'.'+ str(status["protocol_minor_version"] )
-                    # status
-                    if (v_supported<v_applet):
-                        msg_status=('The version of your Satochip is higher than supported. \nYou should update Satochip-Bridge!')
-                    else:
-                        msg_status= 'Satochip-Bridge is up-to-date'
-                    # needs2FA?
-                    if len(response)>=9 and response[8]==0X01: 
-                        needs_2FA= "yes"
-                    elif len(response)>=9 and response[8]==0X00: 
-                        needs_2FA= "no"
-                    else:
-                        needs_2FA= "unknown"
-                    #is_seeded?
-                    if len(response) >=10:
-                        is_seeded="yes" if status["is_seeded"] else "no" 
-                    else: #for earlier versions
-                        try: 
-                            self.client.cc.card_bip32_get_authentikey()
-                            is_seeded="yes"
-                        except UninitializedSeedError:
-                            is_seeded="no"
-                        except Exception:
-                            is_seeded="unknown"    
-                    # secure channel
-                    if status["needs_secure_channel"]:
-                        needs_SC= "yes"
-                    else:
-                        needs_SC= "no"
-                else:
-                    msg_status= 'No card found! please insert card!'
-                    
-                frame_layout1= [[sg.Text('Supported Version: ', size=(20, 1)), sg.Text(sw_rel)],
-                                            [sg.Text('Firmware Version: ', size=(20, 1)), sg.Text(fw_rel)],
-                                            [sg.Text('Wallet is seeded: ', size=(20, 1)), sg.Text(is_seeded)],
-                                            [sg.Text('Requires 2FA: ', size=(20, 1)), sg.Text(needs_2FA)],
-                                            [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)]]
-                frame_layout2= [[sg.Text(msg_status, justification='center', relief=sg.RELIEF_SUNKEN)]]
-                frame_layout3= [[sg.Text(msg_copyright, justification='center', relief=sg.RELIEF_SUNKEN)]]
-                layout = [[sg.Frame('Satochip', frame_layout1, font='Any 12', title_color='blue')],
-                              [sg.Frame('Satochip status', frame_layout2, font='Any 12', title_color='blue')],
-                              [sg.Frame('About Satochip-Bridge', frame_layout3, font='Any 12', title_color='blue')],
-                              [sg.Button('Ok')]]
-                
-                window = sg.Window('Satochip-Bridge: About', layout, icon=self.satochip_icon)    
-                event, value = window.read()    
-                window.close()  
-                del window
-                continue
-             
-            ## Quit ##
-            elif menu_item in (None, 'Quit'):
-                break
-                            
-            # check for handle requests from client through the queue
-            self.reply()
-         
-        # exit after leaving the loop
-        #sys.exit() # does not finish background thread
-        os._exit(0) # kill background thread but doesn't let the interpreter do any cleanup before the process dies
+    
