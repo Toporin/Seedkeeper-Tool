@@ -2,6 +2,7 @@
 #import PySimpleGUIWx as sg 
 import PySimpleGUIQt as sg 
 import base64    
+import json
 import getpass
 import pyperclip
 from pyperclip import PyperclipException
@@ -150,6 +151,8 @@ class HandlerSimpleGUI:
                         [sg.Button('Generate a new seed')],
                         [sg.Button('Import a Secret')],
                         [sg.Button('Export a Secret')],
+                        [sg.Button('Export Secure Secret')],
+                        [sg.Button('Import Secure Secret')], 
                         [sg.Button('List Secrets')],
                         [sg.Button('Get logs')],
                         [sg.Button('About')],
@@ -187,7 +190,7 @@ class HandlerSimpleGUI:
         layout = [
             [sg.Text('Choose the type of secret you wish to import: ', size=(40, 1))],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(20, 1))],
-            [sg.Text('Type: ', size=(10, 1)), sg.InputCombo(('BIP39 seed', 'Electrum seed', 'MasterSeed', 'Public Key', 'Password'), key='type', size=(20, 1))],
+            [sg.Text('Type: ', size=(10, 1)), sg.InputCombo(('BIP39 seed', 'Electrum seed', 'MasterSeed', 'Public Key', 'Authentikey from TrustStore', 'Password'), key='type', size=(20, 1))],
             [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in clear allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
         ] 
@@ -248,12 +251,20 @@ class HandlerSimpleGUI:
                     pubkey= values['pubkey']
                     int(pubkey, 16) # check if correct hex
                     pubkey= pubkey[pubkey.startswith("0x") and len("0x"):] #strip '0x' if need be
+                    
                     if len(pubkey) not in [66, 130]:
                         raise ValueError(f"Wrong pubkey length: {len(pubkey)} (should be 66 or 130 hex characters)")
                     elif len(pubkey)== 130 and not pubkey.startswith("04"):
                         raise ValueError(f"Wrong pubkey: uncompressed pubkey should start with '04' ")
                     elif len(pubkey)== 66 and not ( pubkey.startswith("02") or pubkey.startswith("03") ):
                         raise ValueError(f"Wrong pubkey: compressed pubkey should start with '02' or '03' ")
+                        
+                    if len(pubkey)==66: #compressed pubkey
+                        #window['-OUTPUT-'].update('WARNING: compressed pubkeys have only limited support')
+                        proceed= self.yes_no_question('WARNING: compressed pubkeys have only limited support.\nAre you sure you want to proceed?')
+                        if not proceed:
+                            continue
+                            
                     break
                 except ValueError as ex: # wrong hex value
                     window['-OUTPUT-'].update(str(ex)) #update('Error: seed should be an hex string with the correct length!')
@@ -261,7 +272,23 @@ class HandlerSimpleGUI:
         window.close()
         del window
         return event, values
+    
+    def import_secret_authentikey(self):
+        logger.debug("import_secret_authentikey")
         
+        layout = [
+            [sg.Text('Choose the authentikey you wish to import from TrustStore: ', size=(40, 1))],
+            [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(self.client.truststore, key='authentikey', size=(20, 1))],
+            [sg.Submit(), sg.Cancel()]
+        ] 
+        window = sg.Window('SeedKeeper: import secret - Step 2', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
+        
+        return event, values
+        
+    
     def import_secret_password(self):    
         logger.debug("import_secret_password")
         
@@ -369,6 +396,151 @@ class HandlerSimpleGUI:
         window.close()  
         del window
     
+    ##
+    def import_secure_secret(self):
+        logger.debug('In import_secure_secret')
+        layout = [
+            [sg.Text('Enter json import text in the box below:')],
+            [sg.Multiline(default_text='paste text here...', key='json', size=(40, 3) )],
+            [sg.Button('Import', bind_return_key=True), sg.Cancel()]
+        ]   
+        window = sg.Window('SeedKeeper: import secure secret', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window
+        return event, values
+        
+    
+    def export_secure_secret(self):
+        logger.debug('In export_secret')
+        layout = [
+            [sg.Text('Id of the secret to export: '), sg.InputText(key='id', size=(10, 1))], #to do: list?
+            [sg.Text('Id of authentikey: '), sg.InputText(key='id_pubkey', size=(10, 1))], #todo: list?
+            [sg.Text('Label: ', size=(10, 1)), sg.Text(key='label')],
+            [sg.Text('Fingerprint: ', size=(10, 1)), sg.Text(key='fingerprint')],
+            [sg.Text('Type: ', size=(10, 1)), sg.Text(key='type')],
+            [sg.Text('Origin: ', size=(10, 1)), sg.Text(key='origin')],
+            [sg.Multiline(key='secret', size=(40, 3) )],
+            [sg.Button('Export', bind_return_key=True), sg.Cancel()]
+        ]   
+        
+        window = sg.Window('SeedKeeper export', layout)      
+        while True:      
+            event, values = window.read()      
+            logger.debug(f"event: {event}")
+            if event == 'Export':  #if event != 'Exit'  and event != 'Cancel':      
+                try:     
+                    sid= int(values['id'])
+                    sid_pubkey= int(values['id_pubkey']) 
+                    if sid_pubkey==0: #todo: better
+                        sid_pubkey=None
+                except Exception as ex:      
+                    self.show_error(f'Error during secret export: {ex}')
+                    continue
+                    
+                try: 
+                    secret_dict= self.client.cc.seedkeeper_export_secure_secret(sid, sid_pubkey)
+                    window['fingerprint'].update(secret_dict['fingerprint'])      
+                    window['label'].update(secret_dict['label'])      
+                    if secret_dict['origin']==0x01:
+                        window['origin'].update('Plain import')      
+                    elif secret_dict['origin']==0x02:
+                        window['origin'].update('Secure import')   
+                    elif secret_dict['origin']==0x03:
+                        window['origin'].update('Generated on card')   
+                    else:
+                        window['origin'].update('Unknown')   
+                    #TODO: parse secret depending to type for all cases (in CardDataParser?)
+                    secret_list= secret_dict['secret']
+                    
+                    #plain export
+                    if sid_pubkey is None: 
+                        secret_size= secret_list[0]
+                        secret_raw= secret_list[1:1+secret_size]
+                        if (secret_dict['type']== 0x10): #Masterseed
+                            secret= bytes(secret_raw).hex()
+                            window['type'].update('Masterseed')      
+                            #window['secret_field'].update('Masterseed: ')    
+                            window['secret'].update(secret)    
+                        elif (secret_dict['type']== 0x30): #BIP39
+                            secret1= bytes(secret_raw).decode('utf-8')
+                            secret= "BIP39: " + secret1
+                            if len(secret_list)>=(2+secret_size): #passphrase
+                                secret_size2= secret_list[1+secret_size]
+                                secret_raw2= secret_list[2+secret_size:2+secret_size+secret_size2]
+                                secret2= bytes(secret_raw2).decode('utf-8')
+                                if len(secret2)>0:
+                                    secret+= "\n" + "Passphrase: " + secret2
+                            window['type'].update('BIP39') 
+                            #window['secret_field'].update('BIP39: ')    
+                            window['secret'].update(secret)    
+                            #window['option_field'].update('Passphrase: ')    
+                            #window['secret2'].update(secret2)    
+                        elif (secret_dict['type']== 0x70): #pubkey
+                            secret= bytes(secret_raw).hex()
+                            window['type'].update('Pubkey') 
+                            #window['secret_field'].update('Pubkey: ')    
+                            window['secret'].update(secret)    
+                        elif (secret_dict['type']== 0x90): #password
+                            secret= bytes(secret_raw).decode('utf-8')
+                            window['type'].update('Password') 
+                            window['secret'].update(secret)   
+                            #window['secret_field'].update('Password: ')    
+                        else:
+                            secret= "Raw hex: "+secret_dict['secret_hex']
+                            #window['secret_field'].update('Secret: ')    
+                            window['type'].update('Unknown') 
+                            window['secret'].update(secret) 
+                    
+                    # secure export print json of Secret?
+                    else: 
+                        window['type'].update('Encrypted Secret') 
+                        window['fingerprint'].update('N/A (encrypted)')      
+                        #secret= bytes(secret_list).hex()
+                        #secret= base64.encodebytes( bytes(secret_list) ).decode('utf8')
+                        try:
+                            secret_dict_pubkey= self.client.cc.seedkeeper_export_plain_secret(sid_pubkey)
+                            authentikey_import= secret_dict_pubkey['secret_hex'][2:]
+                        except Exception as ex:
+                            logger.warning('Exception during pubkey export: '+str(ex))
+                            authentikey_import= "(unknown)"
+                        
+                        secret_obj= {  
+                                            'authentikey_exporter': self.client.cc.parser.authentikey.get_public_key_bytes(False).hex(),
+                                            'authentikey_importer': authentikey_import,
+                                            'secrets':   [{
+                                                    'label': secret_dict['label'], 
+                                                    'type': secret_dict['type'],    
+                                                    'origin': secret_dict['origin'], 
+                                                    'export_rights': secret_dict['export_rights'], 
+                                                    'rfu1': secret_dict['rfu1'], 
+                                                    'rfu2': secret_dict['rfu2'], 
+                                                    'fingerprint': secret_dict['fingerprint'], 
+                                                    'iv': bytes(secret_dict['iv']).hex(), 
+                                                    'secret': base64.encodebytes( bytes(secret_list) ).decode('utf8'), 
+                                                    'hmac': 'todo',
+                                                }],
+                                            }
+                        secret= json.dumps(secret_obj)
+                        window['secret'].update(secret)   
+                        
+                        
+                except (SeedKeeperExportNotAllowedError, SeedKeeperObjectNotFoundError, UnexpectedSW12Error) as ex:
+                    #window['secret_field'].update('Secret: ')    
+                    window['secret'].update(str(ex))      
+                    window['type'].update("N/A")      
+                    window['fingerprint'].update("N/A")      
+                    window['label'].update("N/A")      
+                
+            else:      
+                break      
+            
+        window.close()  
+        del window
+    ##
+    
+    
+    
     def logs_menu(self):
         logger.debug('In logs_menu')
         (logs, nbtotal_logs, nbavail_logs)= self.client.cc.seedkeeper_print_logs(print_all=True)
@@ -443,6 +615,7 @@ class HandlerSimpleGUI:
         is_seeded= "N/A"
         needs_2FA= "N/A"
         needs_SC= "N/A"
+        authentikey= "N/A"
         msg_status= ("Card is not initialized! \nClick on 'Setup new Satochip' in the menu to start configuration.")
             
         (response, sw1, sw2, status)=self.client.cc.card_get_status()
@@ -478,6 +651,12 @@ class HandlerSimpleGUI:
                 needs_SC= "yes"
             else:
                 needs_SC= "no"
+            # authentikey
+            authentikey_pubkey=self.client.cc.card_bip32_get_authentikey()
+            authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
+            authentikey= authentikey_bytes.hex()
+            authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=True).hex()
+            
         else:
             msg_status= 'No card found! please insert card!'
             
@@ -485,7 +664,9 @@ class HandlerSimpleGUI:
                                     [sg.Text('Firmware Version: ', size=(20, 1)), sg.Text(fw_rel)],
                                     #[sg.Text('Wallet is seeded: ', size=(20, 1)), sg.Text(is_seeded)],
                                     #[sg.Text('Requires 2FA: ', size=(20, 1)), sg.Text(needs_2FA)],
-                                    [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)]]
+                                    [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)],
+                                    [sg.Text('Authentikey: ', size=(20, 1)), sg.Text(authentikey_comp)],
+                                    [sg.Button('Add Authentikey to TrustStore', key='add_authentikey', size= (20,1) )]]
         frame_layout2= [[sg.Text(msg_status, justification='center', relief=sg.RELIEF_SUNKEN)]]
         frame_layout3= [[sg.Text(msg_copyright, justification='center', relief=sg.RELIEF_SUNKEN)]]
         layout = [[sg.Frame('SeedKeeper', frame_layout1, font='Any 12', title_color='blue')],
@@ -494,7 +675,19 @@ class HandlerSimpleGUI:
                       [sg.Button('Ok')]]
         
         window = sg.Window('SeedKeeperUtil: About', layout, icon=self.satochip_icon)    
-        event, values = window.read()    
+        
+        while True:
+            event, values = window.read() 
+            if event== 'add_authentikey':
+                if authentikey not in self.client.truststore:
+                    self.client.truststore+=[authentikey]
+                    self.show_success('Authentikey added to TrustStore!')
+                else:
+                    self.show_success('Authentikey already in TrustStore!')
+            if event=='Ok' or event=='Cancel':
+                break
+        
+        #event, values = window.read()    
         window.close()  
         del window
     

@@ -1,5 +1,6 @@
 import threading
 import logging
+import json
 from os import urandom
 from queue import Queue 
 
@@ -22,6 +23,7 @@ class Client:
         self.queue_request= Queue()
         self.queue_reply= Queue()
         self.cc= cc
+        self.truststore=[]
     
     def request_threading(self, request_type, *args):
         logger.debug('Client request: '+ str(request_type))
@@ -253,7 +255,7 @@ class Client:
         event, values = self.handler.import_secret_menu()
         
         if event == 'Submit':
-            dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Public Key':0x70, 'Password':0x90}
+            dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90}
             stype= values['type']
             itype= dic_type[stype]
             label= values['label']
@@ -308,7 +310,24 @@ class Client:
                 else:
                     self.handler.show_message(f"Operation cancelled")
                     return None
+                    
+            elif stype== 'Authentikey from TrustStore':
+                if len(self.truststore)==0:
+                    self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
+                    return None
                 
+                event, values= self.handler.import_secret_authentikey()
+                if event == 'Submit':
+                    authentikey= values['authentikey']
+                    authentikey_list= list( bytes.fromhex(authentikey) )
+                    secret= [len(authentikey_list)] + authentikey_list
+                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    return sid
+                else:
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+            
             elif stype== 'Password':
                 event, values= self.handler.import_secret_password()
                 if event == 'Submit':
@@ -329,8 +348,49 @@ class Client:
             
         else: 
             return None
+    
+    def import_secure_secret(self):
+        logger.debug("In import_secure_secret()") #debugSatochip
         
+        event, values = self.handler.import_secure_secret()
+        
+        if event == 'Import':
+            secret_jsonstr= values['json']
+            logger.debug('Secret_json:'+secret_jsonstr)
+            secret_json= json.loads(secret_jsonstr)
 
+            # check if correct importer
+            authentikey_importer=secret_json['authentikey_importer']
+            authentikey= self.cc.card_bip32_get_authentikey().get_public_key_bytes(compressed=False).hex()
+            if authentikey != authentikey_importer:
+                self.handler.show_error('Authentikey mismatch: ' + authentikey_importer + 'should be' + authentikey)
+                return None
+            
+            # get sid from authentikey_exporter
+            authentikey_exporter=secret_json['authentikey_importer']
+            sid_pubkey=None
+            headers= self.cc.seedkeeper_list_secret_headers()
+            for header_dic in headers:
+                if header_dic['type']==0x70:
+                    secret_dic= self.cc.seedkeeper_export_plain_secret(header_dic['id'])
+                    pubkey= secret_dic['secret_hex'][2:]
+                    if pubkey== authentikey_exporter:
+                        sid_pubkey= header_dic['id']
+                        logger.debug('Found sid_pubkey: ' + str(sid_pubkey) )
+                        break
+            
+            if sid_pubkey is not None:
+                secret_dic=secret_json['secrets'][0]
+                sid, fingerprint = self.cc.seedkeeper_import_secure_secret(secret_dic, sid_pubkey)
+                self.handler.show_success('Key securely imported  successfully with id:' + str(sid))
+            else:
+                self.handler.show_error('Could not find a trusted pubkey matching '+ authentikey_exporter)
+                return None
+            
+        else: 
+            return None
+    
+    
     def seed_wizard(self): 
         logger.debug("In seed_wizard()") #debugSatochip
             

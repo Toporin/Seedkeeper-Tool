@@ -16,8 +16,8 @@ try:
     from handler import HandlerTxt, HandlerSimpleGUI
 except Exception as e:
     print('ImportError: '+repr(e))
-    from satochip_bridge.Client import Client
-    from satochip_bridge.handler import HandlerTxt, HandlerSimpleGUI
+    from seedkeeper.Client import Client
+    from seedkeeper.handler import HandlerTxt, HandlerSimpleGUI
 
 
 if (len(sys.argv)>=2) and (sys.argv[1]in ['-v', '--verbose']):
@@ -48,6 +48,12 @@ while(True):
         client.import_secret()
     elif event == 'Export a Secret':
         handler.export_secret()
+        
+    elif event== 'Export Secure Secret':
+        handler.export_secure_secret()
+    elif event== 'Import Secure Secret':
+        client.import_secure_secret()
+        
     elif event == 'List Secrets':
         handler.list_headers()
     elif event == 'Get logs':
