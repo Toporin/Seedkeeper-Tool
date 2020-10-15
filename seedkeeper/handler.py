@@ -13,7 +13,7 @@ from queue import Queue
 
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.CardConnector import CardConnector
-from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperExportNotAllowedError, SeedKeeperObjectNotFoundError, UnexpectedSW12Error
+from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
 from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
 
@@ -383,7 +383,7 @@ class HandlerSimpleGUI:
                         window['type'].update('Unknown') 
                         window['secret'].update(secret) 
                         
-                except (SeedKeeperExportNotAllowedError, SeedKeeperObjectNotFoundError, UnexpectedSW12Error) as ex:
+                except (SeedKeeperError, UnexpectedSW12Error) as ex:
                     #window['secret_field'].update('Secret: ')    
                     window['secret'].update(str(ex))      
                     window['type'].update("N/A")      
@@ -432,7 +432,7 @@ class HandlerSimpleGUI:
                 try:     
                     sid= int(values['id'])
                     sid_pubkey= int(values['id_pubkey']) 
-                    if sid_pubkey==0: #todo: better
+                    if sid_pubkey==-1: #todo: better
                         sid_pubkey=None
                 except Exception as ex:      
                     self.show_error(f'Error during secret export: {ex}')
@@ -516,16 +516,17 @@ class HandlerSimpleGUI:
                                                     'rfu1': secret_dict['rfu1'], 
                                                     'rfu2': secret_dict['rfu2'], 
                                                     'fingerprint': secret_dict['fingerprint'], 
+                                                    'header': bytes(secret_dict['header']).hex(), 
                                                     'iv': bytes(secret_dict['iv']).hex(), 
-                                                    'secret': base64.encodebytes( bytes(secret_list) ).decode('utf8'), 
-                                                    'hmac': 'todo',
+                                                    'secret_base64': base64.encodebytes( bytes(secret_list) ).decode('utf8'), 
+                                                    'hmac': bytes(secret_dict['hmac']).hex(), 
                                                 }],
                                             }
                         secret= json.dumps(secret_obj)
                         window['secret'].update(secret)   
                         
                         
-                except (SeedKeeperExportNotAllowedError, SeedKeeperObjectNotFoundError, UnexpectedSW12Error) as ex:
+                except (SeedKeeperError, UnexpectedSW12Error) as ex:
                     #window['secret_field'].update('Secret: ')    
                     window['secret'].update(str(ex))      
                     window['type'].update("N/A")      

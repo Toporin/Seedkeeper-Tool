@@ -4,7 +4,7 @@ import json
 from os import urandom
 from queue import Queue 
 
-from pysatochip.CardConnector import CardConnector, UninitializedSeedError
+from pysatochip.CardConnector import CardConnector, UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error
 from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
@@ -357,8 +357,13 @@ class Client:
         if event == 'Import':
             secret_jsonstr= values['json']
             logger.debug('Secret_json:'+secret_jsonstr)
-            secret_json= json.loads(secret_jsonstr)
-
+            try:
+                secret_json= json.loads(secret_jsonstr)
+            except json.JSONDecodeError as ex:
+                logger.error(f"JSON parsing error during secure secret import: {ex}")
+                self.handler.show_error(f"JSON parsing error during secret import: {ex}")
+                return None
+                
             # check if correct importer
             authentikey_importer=secret_json['authentikey_importer']
             authentikey= self.cc.card_bip32_get_authentikey().get_public_key_bytes(compressed=False).hex()
@@ -372,7 +377,8 @@ class Client:
             headers= self.cc.seedkeeper_list_secret_headers()
             for header_dic in headers:
                 if header_dic['type']==0x70:
-                    secret_dic= self.cc.seedkeeper_export_plain_secret(header_dic['id'])
+                    #secret_dic= self.cc.seedkeeper_export_plain_secret(header_dic['id'])
+                    secret_dic= self.cc.seedkeeper_export_secure_secret(header_dic['id'], None) #export pubkey in plain
                     pubkey= secret_dic['secret_hex'][2:]
                     if pubkey== authentikey_exporter:
                         sid_pubkey= header_dic['id']
@@ -380,9 +386,14 @@ class Client:
                         break
             
             if sid_pubkey is not None:
-                secret_dic=secret_json['secrets'][0]
-                sid, fingerprint = self.cc.seedkeeper_import_secure_secret(secret_dic, sid_pubkey)
-                self.handler.show_success('Key securely imported  successfully with id:' + str(sid))
+                try:
+                    secret_dic=secret_json['secrets'][0]
+                    sid, fingerprint = self.cc.seedkeeper_import_secure_secret(secret_dic, sid_pubkey)
+                    self.handler.show_success('Key securely imported  successfully with id:' + str(sid))
+                except (SeedKeeperError, UnexpectedSW12Error) as ex:
+                    logger.error(f"Error during secure secret import: {ex}")
+                    self.handler.show_error(f"Error during secret import: {ex}")
+                    return None
             else:
                 self.handler.show_error('Could not find a trusted pubkey matching '+ authentikey_exporter)
                 return None
