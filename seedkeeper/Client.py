@@ -255,15 +255,10 @@ class Client:
         event, values = self.handler.import_secret_menu()
         
         if event == 'Submit':
-            dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90}
-            stype= values['type']
-            itype= dic_type[stype]
-            label= values['label']
-            dic_export_rights={'Export in clear allowed':0x01 , 'Export encrypted only':0x02}
-            export_rights= dic_export_rights[values['export_rights']]
-            
+        
+            stype= values['type'][0] # values['type']           
             if stype== 'BIP39 seed':
-                (mnemonic, passphrase, seed)= self.seed_wizard() #todo: check None
+                (mnemonic, passphrase, seed, label, export_rights)= self.seed_wizard() #todo: check None
                 if mnemonic is None:
                     self.handler.show_message(f"Secret import aborted!")
                     return None
@@ -271,7 +266,10 @@ class Client:
                 passphrase_list= list(passphrase.encode('utf-8'))
                 secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
                 try:
-                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secure_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 except Exception as ex:
@@ -288,23 +286,35 @@ class Client:
                 event, values= self.handler.import_secret_masterseed()
                 if event == 'Submit':
                     masterseed= values['masterseed']
-                    logger.debug(masterseed) #debug
                     masterseed_list= list( bytes.fromhex(masterseed) )
                     secret= [len(masterseed_list)] + masterseed_list
-                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret) #deprecated
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secure_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 else:
                     self.handler.show_message(f"Operation cancelled")
                     return None
                     
+            elif stype== 'Secure import from json':
+                self.import_secure_secret()
+                
             elif stype== 'Public Key':
                 event, values= self.handler.import_secret_pubkey()
                 if event == 'Submit':
                     pubkey= values['pubkey']
                     pubkey_list= list( bytes.fromhex(pubkey) )
                     secret= [len(pubkey_list)] + pubkey_list
-                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secure_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 else:
@@ -321,7 +331,12 @@ class Client:
                     authentikey= values['authentikey']
                     authentikey_list= list( bytes.fromhex(authentikey) )
                     secret= [len(authentikey_list)] + authentikey_list
-                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secure_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 else:
@@ -334,7 +349,12 @@ class Client:
                     password= values['password']
                     password_list= list( password.encode('utf-8') )
                     secret= [len(password_list)] + password_list
-                    (sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secure_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 else:
@@ -349,6 +369,23 @@ class Client:
         else: 
             return None
     
+    def make_header(self, stype, export_rights, label):
+        dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Secure import from json':0x00, 
+                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90}
+        dic_export_rights={'Export in plaintext allowed':0x01 , 'Export encrypted only':0x02}
+        id=2*[0x00]
+        itype= dic_type[stype]
+        origin= 0x00
+        export= dic_export_rights[export_rights]
+        export_counters=3*[0x00]
+        fingerprint= 4*[0x00]
+        rfu=2*[0x00]
+        label_size= len(label)
+        label_list= list(label.encode('utf8'))
+        header_list= id + [itype, origin, export] + export_counters + fingerprint + rfu + [label_size] + label_list
+        header_hex= bytes(header_list).hex()
+        return header_hex
+     
     def import_secure_secret(self):
         logger.debug("In import_secure_secret()") #debugSatochip
         
@@ -401,12 +438,11 @@ class Client:
         else: 
             return None
     
-    
     def seed_wizard(self): 
         logger.debug("In seed_wizard()") #debugSatochip
             
         from mnemonic import Mnemonic
-        # state: state_choose_seed_action - state_create_seed -  state_request_passphrase - state_confirm_seed  - state_confirm_passphrase - state_abort
+        # state: state_choose_seed_action - state_create_seed -  state_request_passphrase - (state_confirm_seed)  - (state_confirm_passphrase) - state_abort
         # state: state_choose_seed_action - state_restore_from_seed - state_request_passphrase - state_abort
         state= 'state_choose_seed_action'    
         
@@ -417,7 +453,9 @@ class Client:
                 seed= None
                 needs_confirm= None
                 use_passphrase= None
-                (event, values)= self.request('choose_seed_action')
+                (event, values)= self.handler.choose_seed_action()
+                label= values['label']
+                export_rights= values['export_rights']
                 if (event =='Next') and (values['create'] is True):
                     state='state_create_seed'
                 elif (event =='Next') and (values['restore'] is True):
@@ -427,7 +465,7 @@ class Client:
                     break
                     
             elif (state=='state_create_seed'):
-                needs_confirm= True
+                needs_confirm= False
                 MNEMONIC = Mnemonic(language="english")
                 mnemonic = MNEMONIC.generate(strength=128)
                 if MNEMONIC.check(mnemonic):    
@@ -437,7 +475,10 @@ class Client:
                         state= 'state_request_passphrase'
                     elif (event=='Next') and not values['use_passphrase']:
                         use_passphrase= False
-                        state= 'state_confirm_seed'
+                        if (needs_confirm):
+                            state= 'state_confirm_seed'
+                        else:
+                            break
                     else: #Back
                         state= 'state_choose_seed_action'
                 else:  #should not happen
@@ -497,15 +538,13 @@ class Client:
             else:
                 logger.warning('State error!')
         
-        if mnemonic is None:
-            self.request('show_message', "Seed initialization aborted! \nYour Satochip may be unusable until a seed is created... \n Go to 'menu' -> 'Setup new Satochip' to complete setup")
+        # if mnemonic is None:
+            # self.request('show_message', "Seed initialization aborted! \nYour Satochip may be unusable until a seed is created... \n Go to 'menu' -> 'Setup new Satochip' to complete setup")
         passphrase='' if passphrase is None else passphrase
         seed= Mnemonic.to_seed(mnemonic, passphrase) if mnemonic else None
         #print('mnemonic: '+ str(mnemonic))
         #print('passphrase: '+str(passphrase))
         #print('seed: '+str(seed.hex()))
         
-        return (mnemonic, passphrase, seed)
- 
- 
- 
+        return (mnemonic, passphrase, seed, label, export_rights)
+

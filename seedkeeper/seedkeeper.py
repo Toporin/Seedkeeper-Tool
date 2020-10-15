@@ -41,19 +41,15 @@ client.card_init_connect()
 while(True):
     event= handler.main_menu()
     logger.debug("Event: "+ str(event))
-
+    
+    # todo: switch seedkeeper cards...
+    #todo: backup seedkeeper
     if event == 'Generate a new seed':
         client.generate_seed()    
     elif  event == 'Import a Secret':
         client.import_secret()
     elif event == 'Export a Secret':
         handler.export_secret()
-        
-    elif event== 'Export Secure Secret':
-        handler.export_secure_secret()
-    elif event== 'Import Secure Secret':
-        client.import_secure_secret()
-        
     elif event == 'List Secrets':
         handler.list_headers()
     elif event == 'Get logs':
