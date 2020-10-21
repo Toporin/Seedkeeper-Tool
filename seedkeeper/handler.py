@@ -27,6 +27,7 @@ class HandlerTxt:
     def update_status(self, isConnected):
         if (isConnected):
             print("Card connected!")
+            self.client.new_card_present=True
         else:
             print("Card disconnected!")
 
@@ -79,30 +80,34 @@ class HandlerSimpleGUI:
     def update_status(self, isConnected):
         logger.debug('In update_status')
         if (isConnected):
-            self.tray.update(filename=self.satochip_icon) #self.tray.update(filename=r'satochip.png')
+            self.client.new_card_present=True
+            #self.client.card_init_connect() # NOK: cannot create pySimpleGui object from thread 
+            #self.tray.update(filename=self.satochip_icon) #self.tray.update(filename=r'satochip.png')
         else:
-            self.tray.update(filename=self.satochip_unpaired_icon) #self.tray.update(filename=r'satochip_unpaired.png')
+            #self.tray.update(filename=self.satochip_unpaired_icon) #self.tray.update(filename=r'satochip_unpaired.png')
+            pass
         logger.debug('End update_status')
         
          
     def show_error(self, msg):
-        sg.popup('Satochip-Bridge Error!', msg, icon=self.satochip_unpaired_icon)
+        sg.popup('Error!', msg, icon=self.satochip_unpaired_icon)
     def show_success(self, msg):
-        sg.popup('Satochip-Bridge Success!', msg, icon=self.satochip_icon)
+        sg.popup('Success!', msg, icon=self.satochip_icon)
     def show_message(self, msg):
-        sg.popup('Satochip-Bridge Notification', msg, icon=self.satochip_icon)
+        sg.popup('Notification', msg, icon=self.satochip_icon)
     def show_notification(self,msg):
         #logger.debug("START show_notification")
-        #self.tray.ShowMessage("Satochip-Bridge notification", msg, filename=self.satochip_icon, time=10000)
-        self.tray.ShowMessage("Satochip-Bridge notification", msg, messageicon=sg.SYSTEM_TRAY_MESSAGE_ICON_INFORMATION, time=100000)
+        #self.tray.ShowMessage("Notification", msg, filename=self.satochip_icon, time=10000) #old
+        #self.tray.ShowMessage("Notification", msg, messageicon=sg.SYSTEM_TRAY_MESSAGE_ICON_INFORMATION, time=100000)
         #logger.debug("END show_notification")
+        pass
     
     def approve_action(self, question):
         logger.debug('In approve_action')
         layout = [[sg.Text(question)],    
                         [sg.Checkbox('Skip confirmation for this connection (not recommended)', key='skip_conf')], 
                         [sg.Button('Yes'), sg.Button('No')]]   
-        window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=self.satochip_icon)  #ok
+        window = sg.Window('Confirmation required', layout, icon=self.satochip_icon)  #ok
         event, values = window.read()    
         window.close()  
         del window
@@ -112,9 +117,9 @@ class HandlerSimpleGUI:
         logger.debug('In yes_no_question')
         layout = [[sg.Text(question)],      
                         [sg.Button('Yes'), sg.Button('No')]]      
-        #window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=SatochipBase64)    #NOK
-        window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=self.satochip_icon)  #ok
-        #window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon="satochip.ico")    #ok
+        #window = sg.Window('Confirmation required', layout, icon=SatochipBase64)    #NOK
+        window = sg.Window('Confirmation required', layout, icon=self.satochip_icon)  #ok
+        #window = sg.Window('Confirmation required', layout, icon="satochip.ico")    #ok
         event, values = window.read()    
         window.close()  
         del window
@@ -130,7 +135,7 @@ class HandlerSimpleGUI:
         layout = [[sg.Text(msg)],      
                          [sg.InputText(password_char='*', key='pin')],      
                          [sg.Submit(), sg.Cancel()]]      
-        window = sg.Window('Satochip-Bridge: PIN required', layout, icon=self.satochip_icon)    
+        window = sg.Window('PIN required', layout, icon=self.satochip_icon)    
         event, values = window.read()    
         window.close()
         del window
@@ -175,7 +180,7 @@ class HandlerSimpleGUI:
             [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in clear allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
         ]   
-        window = sg.Window('Satochip-Bridge: Confirmation required', layout, icon=self.satochip_icon)  #ok
+        window = sg.Window('Confirmation required', layout, icon=self.satochip_icon)  #ok
 
         event, values = window.read()    
         window.close()  
@@ -443,21 +448,23 @@ class HandlerSimpleGUI:
         
         # get a list of all the secrets & pubkeys available
         label_list=[]
-        #fingerprint_list=[]
         id_list=[]
-        #pubkey_list=[]
         label_pubkey_list=['None (export to plaintext)']
         id_pubkey_list=[None]
-        headers= self.client.cc.seedkeeper_list_secret_headers()
-        for header_dic in headers:
-            label_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] )
-            id_list.append( header_dic['id'] )
-            if header_dic['type']==0x70:
-                pubkey_dic= self.client.cc.seedkeeper_export_secure_secret(header_dic['id'], None) #export pubkey in plain
-                pubkey= pubkey_dic['secret_hex'][2:10]
-                label_pubkey_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] + ' - ' + pubkey + '...')
-                id_pubkey_list.append( header_dic['id'] )
-        
+        try:
+            headers= self.client.cc.seedkeeper_list_secret_headers()
+            for header_dic in headers:
+                label_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] )
+                id_list.append( header_dic['id'] )
+                if header_dic['type']==0x70:
+                    pubkey_dic= self.client.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
+                    pubkey= pubkey_dic['secret_hex'][2:10]
+                    label_pubkey_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] + ' - ' + pubkey + '...')
+                    id_pubkey_list.append( header_dic['id'] )
+        except Exception as ex:      
+            self.show_error(f'Error during secret export: {ex}')
+            return
+            
         layout = [
             [sg.Text('Secret to export: ', size=(10, 1)), sg.InputCombo(label_list, key='label_list', size=(40, 1)) ], 
             [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(label_pubkey_list, key='label_pubkey_list', size=(40, 1)) ],
@@ -484,7 +491,7 @@ class HandlerSimpleGUI:
                     continue
                     
                 try: 
-                    secret_dict= self.client.cc.seedkeeper_export_secure_secret(sid, sid_pubkey)
+                    secret_dict= self.client.cc.seedkeeper_export_secret(sid, sid_pubkey)
                     window['fingerprint'].update(secret_dict['fingerprint'])      
                     window['label'].update(secret_dict['label'])      
                     if secret_dict['origin']==0x01:
@@ -543,7 +550,7 @@ class HandlerSimpleGUI:
                         #window['fingerprint'].update('N/A (encrypted)')      
                         try:
                             #secret_dict_pubkey= self.client.cc.seedkeeper_export_plain_secret(sid_pubkey)
-                            secret_dict_pubkey= self.client.cc.seedkeeper_export_secure_secret(sid_pubkey)
+                            secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
                             authentikey_importer= secret_dict_pubkey['secret_hex'][2:]
                         except Exception as ex:
                             logger.warning('Exception during pubkey export: '+str(ex))
@@ -586,7 +593,13 @@ class HandlerSimpleGUI:
     
     def logs_menu(self):
         logger.debug('In logs_menu')
-        (logs, nbtotal_logs, nbavail_logs)= self.client.cc.seedkeeper_print_logs(print_all=True)
+        
+        try:
+            (logs, nbtotal_logs, nbavail_logs)= self.client.cc.seedkeeper_print_logs(print_all=True)
+        except Exception as ex:      
+            self.show_error(f'Error during logs export: {ex}')
+            return
+            
         #TODO: nice presentation instead of raw data
         
         txt= ''
@@ -607,7 +620,12 @@ class HandlerSimpleGUI:
     def list_headers(self):
         logger.debug('In list_headers')
         
-        headers =self.client.cc.seedkeeper_list_secret_headers()
+        try:
+            headers =self.client.cc.seedkeeper_list_secret_headers()
+        except Exception as ex:      
+            self.show_error(f'Error during header listing: {ex}')
+            return
+            
         #TODO: nice presentation instead of raw data
         
         txt= ''
@@ -658,7 +676,8 @@ class HandlerSimpleGUI:
         is_seeded= "N/A"
         needs_2FA= "N/A"
         needs_SC= "N/A"
-        authentikey= "N/A"
+        authentikey= None
+        authentikey_comp= "N/A"
         msg_status= ("Card is not initialized! \nClick on 'Setup new Satochip' in the menu to start configuration.")
             
         (response, sw1, sw2, status)=self.client.cc.card_get_status()
@@ -695,11 +714,15 @@ class HandlerSimpleGUI:
             else:
                 needs_SC= "no"
             # authentikey
-            authentikey_pubkey=self.client.cc.card_bip32_get_authentikey()
-            authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
-            authentikey= authentikey_bytes.hex()
-            authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=True).hex()
-            
+            try:
+                authentikey_pubkey=self.client.cc.card_bip32_get_authentikey()
+                authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
+                authentikey= authentikey_bytes.hex()
+                authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=True).hex()
+            except UninitializedSeedError:
+                authentikey= None
+                authentikey_comp= "This SeedKeeper is not initialized!"
+                
         else:
             msg_status= 'No card found! please insert card!'
             
@@ -722,11 +745,13 @@ class HandlerSimpleGUI:
         while True:
             event, values = window.read() 
             if event== 'add_authentikey':
-                if authentikey not in self.client.truststore:
+                if authentikey is None:
+                    self.show_error('No authentikey available!')
+                elif authentikey in self.client.truststore:
+                    self.show_success('Authentikey already in TrustStore!')
+                else:
                     self.client.truststore+=[authentikey]
                     self.show_success('Authentikey added to TrustStore!')
-                else:
-                    self.show_success('Authentikey already in TrustStore!')
             if event=='Ok' or event=='Cancel':
                 break
         
@@ -738,7 +763,7 @@ class HandlerSimpleGUI:
 #            SATOCHIP                               
 ####################################
      
-    def QRDialog(self, data, parent=None, title = "Satochip-Bridge: QR code", show_text=False, msg= ''):
+    def QRDialog(self, data, parent=None, title = "QR code", show_text=False, msg= ''):
         logger.debug('In QRDialog')
         import pyqrcode
         code = pyqrcode.create(data)
@@ -769,7 +794,7 @@ class HandlerSimpleGUI:
                 [sg.InputText(password_char='*', key='pin')], 
                 [sg.Checkbox('Also reset 2FA', key='reset_2FA')], 
                 [sg.Button('Ok'), sg.Button('Cancel')]]
-        window = sg.Window("Satochip-Bridge: Reset seed", layout, icon=self.satochip_icon)    
+        window = sg.Window("Reset seed", layout, icon=self.satochip_icon)    
         event, values = window.read()    
         window.close()
         del window
@@ -792,7 +817,7 @@ class HandlerSimpleGUI:
             [sg.Radio('I already have a seed', 'radio1', key='restore')], 
             [sg.Button('Cancel'), sg.Button('Next')]
         ]
-        window = sg.Window("Satochip-Bridge: Create or restore seed", layout, icon=self.satochip_icon)        
+        window = sg.Window("Create or restore seed", layout, icon=self.satochip_icon)        
         event, values = window.read()    
         window.close()
         del window
@@ -816,7 +841,7 @@ class HandlerSimpleGUI:
                 [sg.Text(warning2)],
                 [sg.Text(warning3)],
                 [sg.Button('Back'), sg.Button('Next'), sg.Button('Copy seed to clipboard')]]
-        window = sg.Window("Satochip-Bridge: Create seed", layout, icon=self.satochip_icon)        
+        window = sg.Window("Create seed", layout, icon=self.satochip_icon)        
         while True:
             event, values = window.read()    
             if event=='Back' or event=='Next' :
@@ -845,7 +870,7 @@ class HandlerSimpleGUI:
                 [sg.InputText(key='passphrase')], 
                 [sg.Text(info2)],
                 [sg.Button('Back'), sg.Button('Next')]]
-        window = sg.Window("Satochip-Bridge: Seed extension", layout, icon=self.satochip_icon)        
+        window = sg.Window("Seed extension", layout, icon=self.satochip_icon)        
         event, values = window.read()    
         window.close()
         del window
@@ -865,7 +890,7 @@ class HandlerSimpleGUI:
                 [sg.Text(info1)], 
                 [sg.InputText(key='seed_confirm')], 
                 [sg.Button('Back'), sg.Button('Next')]]
-        window = sg.Window("Satochip-Bridge: Confirm seed", layout, icon=self.satochip_icon)        
+        window = sg.Window("Confirm seed", layout, icon=self.satochip_icon)        
         event, values = window.read()    
         window.close()
         del window
@@ -883,7 +908,7 @@ class HandlerSimpleGUI:
                 [sg.Text(info1)], 
                 [sg.InputText(key='passphrase_confirm')], 
                 [sg.Button('Back'), sg.Button('Next')]]
-        window = sg.Window("Satochip-Bridge: Confirm seed extension", layout, icon=self.satochip_icon)        
+        window = sg.Window("Confirm seed extension", layout, icon=self.satochip_icon)        
         event, values = window.read()    
         window.close()
         del window
@@ -905,7 +930,7 @@ class HandlerSimpleGUI:
                 [sg.InputText(key='seed')], 
                 [sg.Checkbox('Extends this seed with custom words', key='use_passphrase')], 
                 [sg.Button('Back'), sg.Button('Next')]]
-        window = sg.Window("Satochip-Bridge: Enter seed", layout, icon=self.satochip_icon)        
+        window = sg.Window("Enter seed", layout, icon=self.satochip_icon)        
         while True:
             event, values = window.read()    
             if event=='Next' :

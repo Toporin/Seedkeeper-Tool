@@ -36,9 +36,14 @@ time.sleep(1) # give some time to initialize reader...
 
 ################
 
-client.card_init_connect()
+#client.card_init_connect()
 
 while(True):
+    
+    #client.card_init_connect()
+    if (client.new_card_present):
+        client.new_card_present= not client.card_init_connect()
+        
     event= handler.main_menu()
     logger.debug("Event: "+ str(event))
     
