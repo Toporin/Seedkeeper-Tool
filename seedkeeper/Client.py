@@ -580,6 +580,7 @@ class Client:
     
     def  get_secret_header_list(self):
         # get a list of all the secrets & pubkeys available
+        dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
         label_list=[]
         id_list=[]
         label_pubkey_list=['None (export to plaintext)']
@@ -587,12 +588,12 @@ class Client:
         try:
             headers= self.cc.seedkeeper_list_secret_headers()
             for header_dic in headers:
-                label_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] )
+                label_list.append( dic_type.get(header_dic['type'], hex(header_dic['type'])) + ': ' + header_dic['fingerprint'] + ': '  + header_dic['label'] )
                 id_list.append( header_dic['id'] )
                 if header_dic['type']==0x70:
                     pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
                     pubkey= pubkey_dic['secret_hex'][2:10]
-                    label_pubkey_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] + ' - ' + pubkey + '...')
+                    label_pubkey_list.append('Public Key: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
                     id_pubkey_list.append( header_dic['id'] )
         except Exception as ex:      
             logger.error(f"Error during secret header listing: {ex}")

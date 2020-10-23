@@ -364,25 +364,6 @@ class HandlerSimpleGUI:
         # get a list of all the secrets & pubkeys available
         (label_list, id_list, label_pubkey_list, id_pubkey_list)= self.client.get_secret_header_list()
         
-        #TODO: remove 
-        # label_list=[]
-        # id_list=[]
-        # label_pubkey_list=['None (export to plaintext)']
-        # id_pubkey_list=[None]
-        # try:
-            # headers= self.client.cc.seedkeeper_list_secret_headers()
-            # for header_dic in headers:
-                # label_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] )
-                # id_list.append( header_dic['id'] )
-                # if header_dic['type']==0x70:
-                    # pubkey_dic= self.client.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
-                    # pubkey= pubkey_dic['secret_hex'][2:10]
-                    # label_pubkey_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] + ' - ' + pubkey + '...')
-                    # id_pubkey_list.append( header_dic['id'] )
-        # except Exception as ex:      
-            # self.show_error(f'Error during secret export: {ex}')
-            # return
-            
         layout = [
             [sg.Text('Secret to export: ', size=(10, 1)), sg.InputCombo(label_list, key='label_list', size=(40, 1)) ], 
             [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(label_pubkey_list, key='label_pubkey_list', size=(40, 1)) ],
@@ -589,6 +570,14 @@ class HandlerSimpleGUI:
     
     def logs_menu(self):
         logger.debug('In logs_menu')
+        ins_dic={0x40:'Create PIN', 0x42:'Verify PIN', 0x44:'Change PIN', 0x46:'Unblock PIN', 
+                        0xA0:'Generate masterseed', 0xA5:'Reset secret',
+                        0xA1:'Import secret', 0xA1A:'Import plain secret', 0xA1B:'Import encrypted secret', 
+                        0xA2:'Export secret', 0xA2A:'Export plain secret', 0xA2B:'Export encrypted secret'}
+        res_dic={0x9000:'OK', 0x63C0:'PIN failed', 0x9C03:'Operation not allowed', 0x9C04:'Setup not done', 0x9C05:'Feature unsupported', 
+                        0x9C01:'No memory left', 0x9C08:'Secret not found', 0x9C10:'Incorrect P1', 0x9C11:'Incorrect P2', 0x9C0F:'Invalid parameter',
+                        0x9C0B:'Invalid signature', 0x9C0C:'Identity blocked', 0x9CFF:'Internal error', 0x9C30:'Lock error', 0x9C31:'Export not allowed',
+                        0x9C32:'Import data too long', 0x9C33:'Wrong MAC during import'}                
         
         try:
             (logs, nbtotal_logs, nbavail_logs)= self.client.cc.seedkeeper_print_logs(print_all=True)
@@ -596,22 +585,42 @@ class HandlerSimpleGUI:
             self.show_error(f'Error during logs export: {ex}')
             return
             
-        #TODO: nice presentation instead of raw data
-        
-        txt= ''
-        txt+= f'Total number of events recorded: {nbtotal_logs} \n'
-        txt+= f'Number of records available: {nbavail_logs} \n\n'
-        
+        headings=['Operation', 'ID1', 'ID2', 'Result']
+        logs= logs[0:nbtotal_logs]
+        strlogs=[]
+        # convert raw logs to readable data
         for log in logs:
-            txt+= str(log)+'\n'
+            ins= log[0]
+            id1= log[1]
+            id2= log[2]
+            result= log[3]
+            if ins==0xA1: # encrypted or plain import? depends on value of id2
+                ins= 0xA1A if (id2==0xFFFF) else 0xA1B
+            elif ins==0xA2:
+                ins= 0xA2A if (id2==0xFFFF) else 0xA2B
+            ins= ins_dic.get( ins, hex(log[0]) ) 
             
-        layout = [[sg.Multiline(txt, size=(45,20))],
+            id1= 'N/A' if id1==0xFFFF else str(id1)
+            id2= 'N/A' if id2==0xFFFF else str(id2)
+            
+            if (result & 0x63C0)== 0x63C0: # last nible contains number of pin remaining
+                remaining_tries= (result & 0x000F)
+                result= 'PIN failed - '+  str(remaining_tries) + ' tries remaining'
+            else:
+                result= res_dic.get( log[3], hex(log[3]) )
+            
+            strlogs.append([ins, id1, id2, result])
+        
+        txt1= f'Number of events recorded: {nbtotal_logs} out of {nbavail_logs} available'
+        layout = [
+                      [sg.Text(txt1, size=(60,1))],
+                      [sg.Table(strlogs, headings=headings)],
                       [sg.Button('Ok')],
                     ]
         window = sg.Window('SeedKeeperUtil Logs', layout, icon=self.satochip_icon)  #ok
         event, values = window.read()    
         window.close()  
-        del window
+        del window        
         
     def list_headers(self):
         logger.debug('In list_headers')
@@ -623,38 +632,37 @@ class HandlerSimpleGUI:
             return
             
         #TODO: nice presentation instead of raw data
+        txt= f'Number of secrets stored: {len(headers)}'
+        headings=['Id', 'Label', 'Type', 'Origin', 'Export rights', 'Nb plain exports', 'Nb encrypted exports', 'Nb secret exported', 'Fingerprint']
+        dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
+        dic_origin= {0x01:'Plaintext import', 0x02:'Encrypted import', 0x03:'Generated on card'}
+        dic_export_rights={0x01:'Plaintext export allowed', 0x02:'Encrypted export only', 0x03:'Export forbidden'}
         
-        txt= ''
-        txt+= f'Number of secrets stored: {len(headers)} \n\n'
-        
+        strheaders=[]
         for header in headers:
             sid= str(header['id'])
-            stype= hex(header['type'])
-            origin= hex(header['origin'])
-            export_rights= str(header['export_rights'])
+            label= header['label']
+            stype= dic_type.get( header['type'], hex(header['type']) ) #hex(header['type'])
+            origin= dic_origin.get( header['origin'], hex(header['origin']) ) #hex(header['origin'])
+            export_rights= dic_export_rights.get( header['export_rights'], hex(header['export_rights']) ) #str(header['export_rights'])
             export_nbplain= str(header['export_nbplain'])
             export_nbsecure= str(header['export_nbsecure'])
+            export_nbcounter= str(header['export_counter']) if header['type']==0x70 else 'N/A'
             fingerprint= header['fingerprint']
-            label= header['label']
             
-            txt+= f'id: {sid} - '
-            txt+= f'type: {stype} - '
-            txt+= f'origin: {origin} - '
-            txt+= f'export_rights: {export_rights} - '
-            txt+= f'export_nbplain: {export_nbplain} - '
-            txt+= f'export_nbsecure: {export_nbsecure} - '
-            txt+= f'fingerprint: {fingerprint} - '
-            txt+= f'label: {label} - '
-            txt+='\n'
-        
-        layout = [[sg.Multiline(txt, size=(45,20))],
+            strheaders.append([sid, label, stype, origin, export_rights, export_nbplain, export_nbsecure, export_nbcounter, fingerprint])
+            
+         
+        layout = [
+                      [sg.Text(txt, size=(60,1))],
+                      [sg.Table(strheaders, headings=headings, display_row_numbers=False)],
                       [sg.Button('Ok')],
                     ]
-        window = sg.Window('SeedKeeperUtil Secret headers', layout, icon=self.satochip_icon)  #ok
+        window = sg.Window('SeedKeeperUtil Logs', layout, icon=self.satochip_icon)  #ok
         event, values = window.read()    
         window.close()  
-        del window
-        
+        del window      
+       
     
     def about_menu(self):
         logger.debug('In about_menu')
@@ -715,7 +723,7 @@ class HandlerSimpleGUI:
                 authentikey_pubkey=self.client.authentikey #self.client.cc.card_bip32_get_authentikey()
                 authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
                 authentikey= authentikey_bytes.hex()
-                authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=False).hex()
+                authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=False).hex()[0:66]+'...'
             except UninitializedSeedError:
                 authentikey= None
                 authentikey_comp= "This SeedKeeper is not initialized!"
