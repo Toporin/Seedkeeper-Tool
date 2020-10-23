@@ -55,6 +55,8 @@ while(True):
         client.import_secret()
     elif event == 'Export a Secret':
         handler.export_secret()
+    elif event == 'Make a backup':
+        handler.make_backup()
     elif event == 'List Secrets':
         handler.list_headers()
     elif event == 'Get logs':

@@ -23,8 +23,9 @@ class Client:
         self.queue_request= Queue()
         self.queue_reply= Queue()
         self.cc= cc
-        self.truststore=[]
+        self.truststore={}
         self.new_card_present= False
+        self.card_label= ''
     
     def request_threading(self, request_type, *args):
         logger.debug('Client request: '+ str(request_type))
@@ -207,7 +208,16 @@ class Client:
                     self.request('show_error', f"Unable to set up applet!  sw12={hex(sw1)} {hex(sw2)}")
                     return False
                     #raise RuntimeError('Unable to setup the device with error code:'+hex(sw1)+' '+hex(sw2))
-            
+                
+                #card label 
+                msg= "Enter a label for this card (optional):"
+                (is_data, data)= self.handler.get_data(msg)
+                if (is_data):
+                    try:
+                        (response, sw1, sw2)= self.cc.card_set_label(data)
+                    except Exception as ex:
+                        logger.warning(f"Error while setting card label: {str(ex)}")
+                
         # verify pin:
         try: 
             self.cc.card_verify_PIN()
@@ -218,12 +228,19 @@ class Client:
         
         # get authentikey
         try:
-            authentikey=self.cc.card_bip32_get_authentikey()
+            self.authentikey=self.cc.card_bip32_get_authentikey()
         except UninitializedSeedError as ex:
             logger.warning(repr(ex))
             self.request('show_error', repr(ex))
             return False
-            
+        
+        #card label 
+        try:
+            (response, sw1, sw2, card_label)= self.cc.card_get_label()
+            self.card_label= card_label
+        except Exception as ex:
+            logger.warning(f"Error while getting card label: {str(ex)}")
+        
         # return true if wizard finishes correctly 
         return True
         
@@ -426,21 +443,31 @@ class Client:
                         break
             
             if sid_pubkey is not None:
-                try:
-                    secret_dic=secret_json['secrets'][0]
-                    sid, fingerprint = self.cc.seedkeeper_import_secret(secret_dic, sid_pubkey)
-                    self.handler.show_success('Key securely imported  successfully with id:' + str(sid))
-                except (SeedKeeperError, UnexpectedSW12Error) as ex:
-                    logger.error(f"Error during secure secret import: {ex}")
-                    self.handler.show_error(f"Error during secret import: {ex}")
-                    return None
+                nb_secrets=nb_errors=0
+                msg=''
+                for secret_dic in secret_json['secrets']:
+                    try:
+                        sid, fingerprint = self.cc.seedkeeper_import_secret(secret_dic, sid_pubkey)
+                        nb_secrets+=1
+                        msg+= f'Securely imported secret with id {str(sid)} \n'
+                    except (SeedKeeperError, UnexpectedSW12Error) as ex:
+                        nb_errors+=1
+                        logger.error(f"Error during secure secret import: {ex}")
+                        msg+= f'Error during secret import: {ex} \n'
+                if (nb_errors==0):
+                    msg= f'Imported {nb_secrets} secrets successfully:\n' + msg
+                    self.handler.show_success(msg)
+                else:
+                    msg= f'Warning: {nb_errors} errors raised during secret import:\n' + msg
+                    self.handler.show_error(msg)
             else:
                 self.handler.show_error('Could not find a trusted pubkey matching '+ authentikey_exporter)
                 return None
             
         else: 
-            return None
-    
+            return None          
+        
+    #todo: refactor
     def seed_wizard(self): 
         logger.debug("In seed_wizard()") #debugSatochip
             
@@ -550,4 +577,26 @@ class Client:
         #print('seed: '+str(seed.hex()))
         
         return (mnemonic, passphrase, seed, label, export_rights)
-
+    
+    def  get_secret_header_list(self):
+        # get a list of all the secrets & pubkeys available
+        label_list=[]
+        id_list=[]
+        label_pubkey_list=['None (export to plaintext)']
+        id_pubkey_list=[None]
+        try:
+            headers= self.cc.seedkeeper_list_secret_headers()
+            for header_dic in headers:
+                label_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] )
+                id_list.append( header_dic['id'] )
+                if header_dic['type']==0x70:
+                    pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
+                    pubkey= pubkey_dic['secret_hex'][2:10]
+                    label_pubkey_list.append( header_dic['fingerprint'] + ': '  + header_dic['label'] + ' - ' + pubkey + '...')
+                    id_pubkey_list.append( header_dic['id'] )
+        except Exception as ex:      
+            logger.error(f"Error during secret header listing: {ex}")
+            #self.show_error(f'Error during secret export: {ex}')
+            #return None
+        
+        return label_list, id_list, label_pubkey_list, id_pubkey_list
