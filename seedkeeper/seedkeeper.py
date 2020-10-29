@@ -34,10 +34,6 @@ client= Client(None, handler, logger.getEffectiveLevel())
 cc = CardConnector(client, logger.getEffectiveLevel())
 time.sleep(1) # give some time to initialize reader...
 
-################
-
-#client.card_init_connect()
-
 while(True):
     
     #client.card_init_connect()

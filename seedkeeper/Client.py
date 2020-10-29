@@ -228,8 +228,8 @@ class Client:
         
         # get authentikey
         try:
-            self.authentikey=self.cc.card_bip32_get_authentikey()
-        except UninitializedSeedError as ex:
+            self.authentikey=self.cc.card_export_authentikey()
+        except Exception as ex:
             logger.warning(repr(ex))
             self.request('show_error', repr(ex))
             return False
@@ -270,125 +270,127 @@ class Client:
             #cancel or None
             return
     
-    
     def import_secret(self):
         
         event, values = self.handler.import_secret_menu()
         
-        if event == 'Submit':
-            try: 
-                stype= values['type'][0] # values['type']           
-                if stype== 'BIP39 seed':
-                    (mnemonic, passphrase, seed, label, export_rights)= self.seed_wizard() #todo: check None
-                    if mnemonic is None:
-                        self.handler.show_message(f"Secret import aborted!")
-                        return None
-                    mnemonic_list= list(mnemonic.encode("utf-8"))
-                    passphrase_list= list(passphrase.encode('utf-8'))
-                    secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+        if (event != 'Submit'):
+            return None
+            
+        try: 
+            stype= values['type'][0] # values['type']           
+            if stype== 'BIP39 seed':
+                (mnemonic, passphrase, seed, label, export_rights)= self.seed_wizard() #todo: check None
+                if mnemonic is None:
+                    self.handler.show_message(f"Secret import aborted!")
+                    return None
+                mnemonic_list= list(mnemonic.encode("utf-8"))
+                passphrase_list= list(passphrase.encode('utf-8'))
+                secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+                #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                header= self.make_header(stype, export_rights, label)
+                secret_dic={'header':header, 'secret':secret}
+                (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                self.handler.show_success(f"Secret successfully imported with id {sid}")
+                return sid
+                
+            elif stype== 'Electrum seed':
+                #TODO adapt wizard for electrum seeds?
+                self.handler.show_error(f"Not implement yet!")
+                return None
+                
+            elif stype== 'MasterSeed':
+                event, values= self.handler.import_secret_masterseed()
+                if event != 'Submit':
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+                masterseed= values['masterseed']
+                masterseed_list= list( bytes.fromhex(masterseed) )
+                secret= [len(masterseed_list)] + masterseed_list
+                label= values['label']
+                export_rights= values['export_rights']
+                header= self.make_header(stype, export_rights, label)
+                secret_dic={'header':header, 'secret':secret}
+                (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
+                self.handler.show_success(f"Masterseed successfully imported with id {sid} \nCorresponding authentikey: {authentikey_hex}")
+                return sid
+                    
+            elif stype== 'Secure import from json':
+                self.import_secure_secret()
+                
+            elif stype== 'Public Key':
+                event, values= self.handler.import_secret_pubkey()
+                if event == 'Submit':
+                    pubkey= values['pubkey']
+                    pubkey_list= list( bytes.fromhex(pubkey) )
+                    secret= [len(pubkey_list)] + pubkey_list
                     #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    label= values['label']
+                    export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
-                    
-                elif stype== 'Electrum seed':
-                    #TODO adapt wizard for electrum seeds?
-                    self.handler.show_error(f"Not implement yet!")
-                    return None
-                    
-                elif stype== 'MasterSeed':
-                    event, values= self.handler.import_secret_masterseed()
-                    if event == 'Submit':
-                        masterseed= values['masterseed']
-                        masterseed_list= list( bytes.fromhex(masterseed) )
-                        secret= [len(masterseed_list)] + masterseed_list
-                        #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret) #deprecated
-                        label= values['label']
-                        export_rights= values['export_rights']
-                        header= self.make_header(stype, export_rights, label)
-                        secret_dic={'header':header, 'secret':secret}
-                        (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                        self.handler.show_success(f"Secret successfully imported with id {sid}")
-                        return sid
-                    else:
-                        self.handler.show_message(f"Operation cancelled")
-                        return None
-                        
-                elif stype== 'Secure import from json':
-                    self.import_secure_secret()
-                    
-                elif stype== 'Public Key':
-                    event, values= self.handler.import_secret_pubkey()
-                    if event == 'Submit':
-                        pubkey= values['pubkey']
-                        pubkey_list= list( bytes.fromhex(pubkey) )
-                        secret= [len(pubkey_list)] + pubkey_list
-                        #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
-                        label= values['label']
-                        export_rights= values['export_rights']
-                        header= self.make_header(stype, export_rights, label)
-                        secret_dic={'header':header, 'secret':secret}
-                        (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                        self.handler.show_success(f"Secret successfully imported with id {sid}")
-                        return sid
-                    else:
-                        self.handler.show_message(f"Operation cancelled")
-                        return None
-                        
-                elif stype== 'Authentikey from TrustStore':
-                    if len(self.truststore)==0:
-                        self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
-                        return None
-                    
-                    event, values= self.handler.import_secret_authentikey()
-                    if event == 'Submit':
-                        authentikey= values['authentikey']
-                        authentikey_list= list( bytes.fromhex(authentikey) )
-                        secret= [len(authentikey_list)] + authentikey_list
-                        #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
-                        label= values['label']
-                        export_rights= values['export_rights']
-                        header= self.make_header(stype, export_rights, label)
-                        secret_dic={'header':header, 'secret':secret}
-                        (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                        self.handler.show_success(f"Secret successfully imported with id {sid}")
-                        return sid
-                    else:
-                        self.handler.show_message(f"Operation cancelled")
-                        return None
-                
-                elif stype== 'Password':
-                    event, values= self.handler.import_secret_password()
-                    if event == 'Submit':
-                        password= values['password']
-                        password_list= list( password.encode('utf-8') )
-                        secret= [len(password_list)] + password_list
-                        #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
-                        label= values['label']
-                        export_rights= values['export_rights']
-                        header= self.make_header(stype, export_rights, label)
-                        secret_dic={'header':header, 'secret':secret}
-                        (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                        self.handler.show_success(f"Secret successfully imported with id {sid}")
-                        return sid
-                    else:
-                        self.handler.show_message(f"Operation cancelled")
-                        return None
-                    
                 else:
-                    #should not happen
-                    logger.error(f'In import_secret: wrong type for import: {stype}')
+                    self.handler.show_message(f"Operation cancelled")
                     return None
-            except Exception as ex:
-                logger.error(f"Error during secret import: {ex}")
-                self.handler.show_error(f"Error during secret import: {ex}")
-                return None
+                    
+            elif stype== 'Authentikey from TrustStore':
+                if len(self.truststore)==0:
+                    self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
+                    return None
                 
-        else: 
+                event, values= self.handler.import_secret_authentikey()
+                if event == 'Submit':
+                    authentikey= values['authentikey']
+                    authentikey_list= list( bytes.fromhex(authentikey) )
+                    if (self.cc.card_type=='SeedKeeper'):
+                        secret= [len(authentikey_list)] + authentikey_list
+                        label= values['label']
+                        export_rights= values['export_rights']
+                        header= self.make_header(stype, export_rights, label)
+                        secret_dic={'header':header, 'secret':secret}
+                        (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                        self.handler.show_success(f"Secret successfully imported with id {sid}")
+                        return sid
+                    else: #Satochip
+                        pubkey_hex=  self.cc.card_import_trusted_pubkey(authentikey_list)
+                        self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' successfully imported to Satochip!")
+                        return 0
+                else:
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+            
+            elif stype== 'Password':
+                event, values= self.handler.import_secret_password()
+                if event == 'Submit':
+                    password= values['password']
+                    password_list= list( password.encode('utf-8') )
+                    secret= [len(password_list)] + password_list
+                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                    self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    return sid
+                else:
+                    self.handler.show_message(f"Operation cancelled")
+                    return None
+                
+            else:
+                #should not happen
+                logger.error(f'In import_secret: wrong type for import: {stype}')
+                return None
+        except Exception as ex:
+            logger.error(f"Error during secret import: {ex}")
+            self.handler.show_error(f"Error during secret import: {ex}")
             return None
-    
+            
+            
     def make_header(self, stype, export_rights, label):
         dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Secure import from json':0x00, 
                                 'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90}
@@ -411,23 +413,26 @@ class Client:
         
         event, values = self.handler.import_secure_secret()
         
-        if event == 'Import':
-            secret_jsonstr= values['json']
-            logger.debug('Secret_json:'+secret_jsonstr)
-            try:
-                secret_json= json.loads(secret_jsonstr)
-            except json.JSONDecodeError as ex:
-                logger.error(f"JSON parsing error during secure secret import: {ex}")
-                self.handler.show_error(f"JSON parsing error during secret import: {ex}")
-                return None
-                
-            # check if correct importer
-            authentikey_importer=secret_json['authentikey_importer']
-            authentikey= self.cc.card_bip32_get_authentikey().get_public_key_bytes(compressed=False).hex()
-            if authentikey != authentikey_importer:
-                self.handler.show_error('Authentikey mismatch: ' + authentikey_importer + 'should be' + authentikey)
-                return None
+        if (event != 'Import'):
+            return None   
+                        
+        secret_jsonstr= values['json']
+        logger.debug('Secret_json:'+secret_jsonstr)
+        try:
+            secret_json= json.loads(secret_jsonstr)
+        except json.JSONDecodeError as ex:
+            logger.error(f"JSON parsing error during secure secret import: {ex}")
+            self.handler.show_error(f"JSON parsing error during secret import: {ex}")
+            return None
             
+        # check if correct importer
+        authentikey_importer=secret_json['authentikey_importer']
+        authentikey= self.cc.card_export_authentikey().get_public_key_bytes(compressed=False).hex()
+        if authentikey != authentikey_importer:
+            self.handler.show_error('Authentikey mismatch: ' + authentikey_importer + ' should be ' + authentikey)
+            return None
+        
+        if (self.cc.card_type=='SeedKeeper'):
             # get sid from authentikey_exporter
             authentikey_exporter=secret_json['authentikey_exporter']
             sid_pubkey=None
@@ -442,30 +447,46 @@ class Client:
                         logger.debug('Found sid_pubkey: ' + str(sid_pubkey) )
                         break
             
-            if sid_pubkey is not None:
-                nb_secrets=nb_errors=0
-                msg=''
-                for secret_dic in secret_json['secrets']:
-                    try:
-                        sid, fingerprint = self.cc.seedkeeper_import_secret(secret_dic, sid_pubkey)
-                        nb_secrets+=1
-                        msg+= f'Securely imported secret with id {str(sid)} \n'
-                    except (SeedKeeperError, UnexpectedSW12Error) as ex:
-                        nb_errors+=1
-                        logger.error(f"Error during secure secret import: {ex}")
-                        msg+= f'Error during secret import: {ex} \n'
-                if (nb_errors==0):
-                    msg= f'Imported {nb_secrets} secrets successfully:\n' + msg
-                    self.handler.show_success(msg)
-                else:
-                    msg= f'Warning: {nb_errors} errors raised during secret import:\n' + msg
-                    self.handler.show_error(msg)
-            else:
+            if sid_pubkey is None:
                 self.handler.show_error('Could not find a trusted pubkey matching '+ authentikey_exporter)
                 return None
             
-        else: 
-            return None          
+            nb_secrets=nb_errors=0
+            msg=''
+            for secret_dic in secret_json['secrets']:
+                try:
+                    sid, fingerprint = self.cc.seedkeeper_import_secret(secret_dic, sid_pubkey)
+                    nb_secrets+=1
+                    msg+= f'Securely imported secret with id {str(sid)} \n'
+                except (SeedKeeperError, UnexpectedSW12Error) as ex:
+                    nb_errors+=1
+                    logger.error(f"Error during secure secret import: {ex}")
+                    msg+= f'Error during secret import: {ex} \n'
+            if (nb_errors==0):
+                msg= f'Imported {nb_secrets} secrets successfully:\n' + msg
+                self.handler.show_success(msg)
+                return nb_secrets
+            else:
+                msg= f'Warning: {nb_errors} errors raised during secret import:\n' + msg
+                self.handler.show_error(msg)
+                return None
+        
+        else: # Satochip
+            # check if authentikey_exporter is trusted
+            authentikey_exporter=secret_json['authentikey_exporter']
+            pubkey_hex= self.cc.card_export_trusted_pubkey()
+            if (pubkey_hex!= authentikey_exporter):
+                self.handler.show_error(f'Authentikey_exporter {authentikey_exporter} does not match Satochip trusted_pubkey {pubkey_hex}!')
+                return None
+            secret_dic= secret_json['secrets'][0]
+            try:
+                authentikey = self.cc.card_bip32_import_encrypted_seed(secret_dic)
+                authentikey_hex= authentikey.get_public_key_bytes(compressed=False).hex()
+                self.handler.show_success(f'Successfully imported masterseed to Satochip with authentikey: {authentikey_hex}')
+                return 1
+            except Exception as ex:
+                self.handler.show_error(str(ex))
+                return None
         
     #todo: refactor
     def seed_wizard(self): 

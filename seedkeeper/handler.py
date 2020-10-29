@@ -672,10 +672,10 @@ class HandlerSimpleGUI:
                                                         "In no event will the authors be held liable for any damages arising from \n"
                                                         "the use of this software."])
         #sw version
-        # v_supported= (CardConnector.SATOCHIP_PROTOCOL_MAJOR_VERSION<<8)+CardConnector.SATOCHIP_PROTOCOL_MINOR_VERSION
-        # sw_rel= str(CardConnector.SATOCHIP_PROTOCOL_MAJOR_VERSION) +'.'+ str(CardConnector.SATOCHIP_PROTOCOL_MINOR_VERSION)
-        v_supported= (SEEDKEEPER_PROTOCOL_MAJOR_VERSION<<8)+SEEDKEEPER_PROTOCOL_MINOR_VERSION
-        sw_rel= str(SEEDKEEPER_PROTOCOL_MAJOR_VERSION) +'.'+ str(SEEDKEEPER_PROTOCOL_MINOR_VERSION)
+        v_supported_satochip= SATOCHIP_PROTOCOL_VERSION
+        sw_rel_satochip= str(SATOCHIP_PROTOCOL_MAJOR_VERSION) +'.'+ str(SATOCHIP_PROTOCOL_MINOR_VERSION)
+        v_supported_seedkeeper= SEEDKEEPER_PROTOCOL_VERSION
+        sw_rel_seedkeeper= str(SEEDKEEPER_PROTOCOL_MAJOR_VERSION) +'.'+ str(SEEDKEEPER_PROTOCOL_MINOR_VERSION)
         fw_rel= "N/A"
         is_seeded= "N/A"
         needs_2FA= "N/A"
@@ -691,8 +691,10 @@ class HandlerSimpleGUI:
             v_applet= (status["protocol_major_version"]<<8)+status["protocol_minor_version"] 
             fw_rel= str(status["protocol_major_version"]) +'.'+ str(status["protocol_minor_version"])  +' - '+ str(status["applet_major_version"]) +'.'+ str(status["applet_minor_version"])
             # status
-            if (v_supported<v_applet):
-                msg_status=(f'The version of your {self.client.cc.card_type}  is higher than supported. \nYou should update SeedKeeperUtil!')
+            if (self.client.cc.card_type=='Satochip' and v_supported_satochip<v_applet):
+                msg_status=(f'The version of your Satochip is higher than supported. \nYou should update SeedKeeperUtil!')
+            elif (self.client.cc.card_type=='SeedKeeper' and v_supported_seedkeeper<v_applet):
+                msg_status=(f'The version of your SeedKeeper is higher than supported. \nYou should update SeedKeeperUtil!')
             else:
                 msg_status= 'SeedKeeperUtil is up-to-date'
             # needs2FA?
@@ -720,7 +722,7 @@ class HandlerSimpleGUI:
                 needs_SC= "no"
             # authentikey
             try:
-                authentikey_pubkey=self.client.authentikey #self.client.cc.card_bip32_get_authentikey()
+                authentikey_pubkey= self.client.cc.card_export_authentikey() # self.client.authentikey #
                 authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
                 authentikey= authentikey_bytes.hex()
                 authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=False).hex()[0:66]+'...'
@@ -737,16 +739,17 @@ class HandlerSimpleGUI:
             
         frame_layout1= [
                                     [sg.Text('Card label: ', size=(20, 1)), sg.Text(card_label)],
-                                    [sg.Text('Firmware Version: ', size=(20, 1)), sg.Text(fw_rel)],
+                                    [sg.Text('Firmware version: ', size=(20, 1)), sg.Text(fw_rel)],
                                     [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)],
                                     [sg.Text('Authentikey: ', size=(20, 1)), sg.Text(authentikey_comp)],
                                     [sg.Button('Add Authentikey to TrustStore', key='add_authentikey', size= (20,1) )]]
         frame_layout2= [
-                                    [sg.Text('Supported Version: ', size=(20, 1)), sg.Text(sw_rel)],
+                                    [sg.Text('Supported version (SeedKeeper): ', size=(20, 1)), sg.Text(sw_rel_seedkeeper)],
+                                    [sg.Text('Supported version (Satochip): ', size=(20, 1)), sg.Text(sw_rel_satochip)],
                                     [sg.Text(msg_status, justification='center', relief=sg.RELIEF_SUNKEN)]]
         frame_layout3= [[sg.Text(msg_copyright, justification='center', relief=sg.RELIEF_SUNKEN)]]
-        layout = [[sg.Frame('SeedKeeper', frame_layout1, font='Any 12', title_color='blue')],
-                      [sg.Frame('SeedKeeper status', frame_layout2, font='Any 12', title_color='blue')],
+        layout = [[sg.Frame(self.client.cc.card_type, frame_layout1, font='Any 12', title_color='blue')],
+                      [sg.Frame('SeedKeeperUtil status', frame_layout2, font='Any 12', title_color='blue')],
                       [sg.Frame('About SeedKeeperUtil', frame_layout3, font='Any 12', title_color='blue')],
                       [sg.Button('Ok')]]
         
