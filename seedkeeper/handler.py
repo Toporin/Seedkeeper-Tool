@@ -160,23 +160,74 @@ class HandlerSimpleGUI:
         data = values['data']
         return (is_data, data)
      
-
+    def setup_card(self):
+        logger.debug('In setup_card')
+        layout = [
+                        #[sg.Text(f'Your {self.client.cc.card_type} needs to be set up! This mùust be done only once.')],      
+                        [sg.Text(f'Please take a moment to set up your {self.client.cc.card_type}. This must be done only once.')],      
+                        [sg.Text('Enter new PIN: ', size=(16,1)), sg.InputText(password_char='*', key='pin')],      
+                        [sg.Text('Confirm PIN: ', size=(16,1)), sg.InputText(password_char='*', key='pin2')],      
+                        [sg.Text('Enter card label (optional): ', size=(16,1)), sg.InputText(key='card_label')],      
+                        [sg.Text(size=(40,1), key='-OUTPUT-')],
+                        [sg.Submit(), sg.Cancel()]]     
+                        
+        window = sg.Window('Setup new card', layout, icon=self.satochip_icon)    
+        while True:                             
+            event, values = window.read() 
+            if event == None or event == 'Cancel':
+                break      
+            elif event == 'Submit':    
+                try:
+                    pin= values['pin']
+                    pin2= values['pin2']
+                    if pin != pin2:
+                        raise ValueError("WARNING: the PIN values do not match! Please type PIN again!")
+                    elif len(pin) < 4:
+                        raise ValueError("WARNING: the PIN must have at least 4 characters!")
+                    elif len(pin) > 16:
+                        raise ValueError("WARNING: the PIN must have less than 16 characters!") 
+                    label= values['card_label']
+                    if len(label)>64:
+                        raise ValueError(f"WARNING: label must have less than 64 characters! Choose another label.")
+                    break
+                except ValueError as ex: # wrong hex value
+                    window['-OUTPUT-'].update(str(ex)) 
+                
+        window.close()
+        del window
+        return event, values
     
 ####################################
-#            SEEDKEEPER                               
+#            SEEDKEEPER                         #      
 ####################################
 
     def main_menu(self):
         logger.debug('In main_menu')
-        layout = [[sg.Text('Welcome to SeedKeeper Utility !')],      
-                        [sg.Button('Generate a new seed')],
-                        [sg.Button('Import a Secret')],
-                        [sg.Button('Export a Secret')],
-                        [sg.Button('Make a backup')],
-                        [sg.Button('List Secrets')],
-                        [sg.Button('Get logs')],
-                        [sg.Button('About')],
-                        [sg.Button('Quit')],
+        
+        button_color_enabled= (None, None) # ('White', 'DarkBlue')
+        button_color_disabled= ('White', 'Gray')
+        
+        disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=disabled7=disabled8=False
+        color1=color2=color3=color4=color5=color6=color7=color8=button_color_enabled
+        # if self.client.cc.card_type=='SeedKeeper':
+            # pass
+        # elif self.client.cc.card_type=='Satochip':
+            # disabled1=disabled3=disabled4=disabled5=disabled6=True
+            # color1=color3=color4=color5=color6=button_color_disabled
+        # else:
+            # disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=True
+            # color1=color2=color3=color4=color5=color6=button_color_disabled
+        
+        layout = [[sg.Text('Welcome to SeedKeeper Utility !')],  
+                        #[sg.Text('Card inserted:' + str(self.client.cc.card_type))],          
+                        [sg.Button('Generate a new seed', disabled= disabled1, button_color=color1) ],
+                        [sg.Button('Import a Secret', disabled= disabled2, button_color=color2)],
+                        [sg.Button('Export a Secret', disabled= disabled3, button_color=color3)],
+                        [sg.Button('Make a backup', disabled= disabled4, button_color=color4)],
+                        [sg.Button('List Secrets', disabled= disabled5, button_color=color5)],
+                        [sg.Button('Get logs', disabled= disabled6, button_color=color6)],
+                        [sg.Button('About', disabled= disabled7, button_color=color7)],
+                        [sg.Button('Quit', disabled= disabled8, button_color=color8)],
                     ]      
         window = sg.Window('SeedKeeper utility', layout, icon=self.satochip_icon)  #ok
         event, values = window.read()    

@@ -171,18 +171,28 @@ class Client:
                 
             # setup device (done only once)
             else:
-                # PIN dialog
-                msg = ("Enter a new PIN for your Satochip:")
-                msg_confirm = ("Please confirm the PIN code for your Satochip:")
-                msg_error = ("The PIN values do not match! Please type PIN again!")
-                (is_PIN, pin_0)= self.PIN_setup_dialog(msg, msg_confirm, msg_error)
-                if not is_PIN:
-                    #raise RuntimeError('A PIN code is required to initialize the Satochip!')
-                    logger.warning('Initialization aborted: a PIN code is required to initialize the Satochip!')
-                    self.request('show_error', 'A PIN code is required to initialize the Satochip.\nInitialization aborted!')
+                
+                #setup dialog
+                (event, values)= self.handler.setup_card()
+                if (event != 'Submit'):
+                    logger.warning('Setup aborted: a PIN code is required to initialize the card!')
+                    self.handler.show_error('A PIN code is required to initialize the card.\nInitialization aborted!')
                     return False
-                    
-                pin_0= list(pin_0)
+                pin_0= list(values['pin'].encode('utf8'))
+                label = values['card_label']
+                
+                # # PIN dialog
+                # msg = ("Enter a new PIN for your Satochip:")
+                # msg_confirm = ("Please confirm the PIN code for your Satochip:")
+                # msg_error = ("The PIN values do not match! Please type PIN again!")
+                # (is_PIN, pin_0)= self.PIN_setup_dialog(msg, msg_confirm, msg_error)
+                # if not is_PIN:
+                    # #raise RuntimeError('A PIN code is required to initialize the Satochip!')
+                    # logger.warning('Initialization aborted: a PIN code is required to initialize the Satochip!')
+                    # self.request('show_error', 'A PIN code is required to initialize the Satochip.\nInitialization aborted!')
+                    # return False
+                #pin_0= list(pin_0)
+                
                 pin_tries_0= 0x05;
                 ublk_tries_0= 0x01;
                 # PUK code can be used when PIN is unknown and the card is locked
@@ -210,13 +220,17 @@ class Client:
                     #raise RuntimeError('Unable to setup the device with error code:'+hex(sw1)+' '+hex(sw2))
                 
                 #card label 
-                msg= "Enter a label for this card (optional):"
-                (is_data, data)= self.handler.get_data(msg)
-                if (is_data):
-                    try:
-                        (response, sw1, sw2)= self.cc.card_set_label(data)
-                    except Exception as ex:
-                        logger.warning(f"Error while setting card label: {str(ex)}")
+                # msg= "Enter a label for this card (optional):"
+                # (is_data, data)= self.handler.get_data(msg)
+                # if (is_data):
+                    # try:
+                        # (response, sw1, sw2)= self.cc.card_set_label(data)
+                    # except Exception as ex:
+                        # logger.warning(f"Error while setting card label: {str(ex)}")
+                try:
+                    (response, sw1, sw2)= self.cc.card_set_label(label)
+                except Exception as ex:
+                    logger.warning(f"Error while setting card label: {str(ex)}")
                 
         # verify pin:
         try: 
