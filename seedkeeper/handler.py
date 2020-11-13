@@ -500,7 +500,6 @@ class HandlerSimpleGUI:
                         if (secret_dict['type']== 0x10): #Masterseed
                             secret= bytes(secret_raw).hex()
                             window['type'].update('Masterseed')      
-                            #window['secret_field'].update('Masterseed: ')    
                             window['secret'].update(secret)    
                         elif (secret_dict['type']== 0x30): #BIP39
                             secret1= bytes(secret_raw).decode('utf-8')
@@ -511,24 +510,29 @@ class HandlerSimpleGUI:
                                 secret2= bytes(secret_raw2).decode('utf-8')
                                 if len(secret2)>0:
                                     secret+= "\n" + "Passphrase: " + secret2
-                            window['type'].update('BIP39') 
-                            #window['secret_field'].update('BIP39: ')    
+                            window['type'].update('BIP39 mnemonic') 
                             window['secret'].update(secret)    
-                            #window['option_field'].update('Passphrase: ')    
-                            #window['secret2'].update(secret2)    
+                        elif (secret_dict['type']== 0x40): #Electrum
+                            secret1= bytes(secret_raw).decode('utf-8')
+                            secret= "Electrum: " + secret1
+                            if len(secret_list)>=(2+secret_size): #passphrase
+                                secret_size2= secret_list[1+secret_size]
+                                secret_raw2= secret_list[2+secret_size:2+secret_size+secret_size2]
+                                secret2= bytes(secret_raw2).decode('utf-8')
+                                if len(secret2)>0:
+                                    secret+= "\n" + "Passphrase: " + secret2
+                            window['type'].update('Electrum mnemonic') 
+                            window['secret'].update(secret)    
                         elif (secret_dict['type']== 0x70): #pubkey
                             secret= bytes(secret_raw).hex()
                             window['type'].update('Pubkey') 
-                            #window['secret_field'].update('Pubkey: ')    
                             window['secret'].update(secret)    
                         elif (secret_dict['type']== 0x90): #password
                             secret= bytes(secret_raw).decode('utf-8')
                             window['type'].update('Password') 
                             window['secret'].update(secret)   
-                            #window['secret_field'].update('Password: ')    
                         else:
-                            secret= "Raw hex: "+secret_dict['secret_hex']
-                            #window['secret_field'].update('Secret: ')    
+                            secret= "Raw hex: "+secret_dict['secret_hex']  
                             window['type'].update('Unknown') 
                             window['secret'].update(secret) 
                     
