@@ -1,6 +1,7 @@
 import threading
 import logging
 import json
+import hashlib
 from os import urandom
 from queue import Queue 
 
@@ -255,6 +256,15 @@ class Client:
         except Exception as ex:
             logger.warning(f"Error while getting card label: {str(ex)}")
         
+        # add authentikey to TrustStore
+        authentikey_hex= self.authentikey.get_public_key_bytes(compressed=False).hex()
+        if authentikey_hex in self.truststore:
+            pass #self.handler.show_success('Authentikey already in TrustStore!')
+        else:
+            self.truststore[authentikey_hex]= self.card_label
+            #self.show_success('Authentikey added to TrustStore!')
+            self.handler.show_notification('Notification', f'Authentikey added to TrustStore! \n{authentikey_hex}')
+        
         # return true if wizard finishes correctly 
         return True
         
@@ -292,26 +302,57 @@ class Client:
             return None
             
         try: 
-            stype= values['type'][0] # values['type']           
-            if stype== 'BIP39 seed':
-                (mnemonic, passphrase, seed, label, export_rights)= self.seed_wizard() #todo: check None
-                if mnemonic is None:
-                    self.handler.show_message(f"Secret import aborted!")
+            stype= values['type'][0] # values['type']     
+            if stype== 'Mnemonic phrase':
+                event, values= self.handler.mnemonic_wizard()
+                if event != 'Submit':
+                    self.handler.show_message(f"Operation cancelled")
                     return None
+                mnemonic= values['mnemonic']
+                mnemonic_type= values['mnemonic_type']
+                passphrase= values['passphrase']
+                label= values['label']
+                export_rights= values['export_rights']
+                
                 mnemonic_list= list(mnemonic.encode("utf-8"))
                 passphrase_list= list(passphrase.encode('utf-8'))
+                stype= 'Electrum seed' if mnemonic_type.startswith('Electrum') else 'BIP39 seed' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
                 secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
-                #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
                 header= self.make_header(stype, export_rights, label)
                 secret_dic={'header':header, 'secret':secret}
                 (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                self.handler.show_success(f"Secret successfully imported with id {sid}")
+                #self.handler.show_success(f"Secret successfully imported with id {sid}")
+                
+                # also import corresponding masterseed
+                masterseed_list= list( values['masterseed'] )
+                secret= [len(masterseed_list)] + masterseed_list
+                label= 'MasterSeed from mnemonic ' + values['label']
+                header= self.make_header('MasterSeed', export_rights, label)
+                secret_dic={'header':header, 'secret':secret}
+                (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
+                authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
+                self.handler.show_success(f"Mnemonic successfully imported with id {sid} \nMasterseed successfully imported with id {sid2} \nCorresponding authentikey: {authentikey_hex}")
                 return sid
                 
-            elif stype== 'Electrum seed':
-                #TODO adapt wizard for electrum seeds?
-                self.handler.show_error(f"Not implement yet!")
-                return None
+            # elif stype== 'BIP39 seed':
+                # (mnemonic, passphrase, seed, label, export_rights)= self.seed_wizard() #todo: check None
+                # if mnemonic is None:
+                    # self.handler.show_message(f"Secret import aborted!")
+                    # return None
+                # mnemonic_list= list(mnemonic.encode("utf-8"))
+                # passphrase_list= list(passphrase.encode('utf-8'))
+                # secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+                # #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                # header= self.make_header(stype, export_rights, label)
+                # secret_dic={'header':header, 'secret':secret}
+                # (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                # self.handler.show_success(f"Secret successfully imported with id {sid}")
+                # return sid
+                
+            # elif stype== 'Electrum seed':
+                # #TODO adapt wizard for electrum seeds?
+                # self.handler.show_error(f"Not implement yet!")
+                # return None
                 
             elif stype== 'MasterSeed':
                 event, values= self.handler.import_secret_masterseed()
@@ -502,116 +543,116 @@ class Client:
                 self.handler.show_error(str(ex))
                 return None
         
-    #todo: refactor
-    def seed_wizard(self): 
-        logger.debug("In seed_wizard()") #debugSatochip
+    # #todo: refactor
+    # def seed_wizard(self): 
+        # logger.debug("In seed_wizard()") #debugSatochip
             
-        from mnemonic import Mnemonic
-        # state: state_choose_seed_action - state_create_seed -  state_request_passphrase - (state_confirm_seed)  - (state_confirm_passphrase) - state_abort
-        # state: state_choose_seed_action - state_restore_from_seed - state_request_passphrase - state_abort
-        state= 'state_choose_seed_action'    
+        # from mnemonic import Mnemonic
+        # # state: state_choose_seed_action - state_create_seed -  state_request_passphrase - (state_confirm_seed)  - (state_confirm_passphrase) - state_abort
+        # # state: state_choose_seed_action - state_restore_from_seed - state_request_passphrase - state_abort
+        # state= 'state_choose_seed_action'    
         
-        while (True):
-            if (state=='state_choose_seed_action'):
-                mnemonic= None
-                passphrase= None
-                seed= None
-                needs_confirm= None
-                use_passphrase= None
-                (event, values)= self.handler.choose_seed_action()
-                label= values['label']
-                export_rights= values['export_rights']
-                if (event =='Next') and (values['create'] is True):
-                    state='state_create_seed'
-                elif (event =='Next') and (values['restore'] is True):
-                    state= 'state_restore_from_seed'
-                else: # cancel
-                    state= 'state_abort'
-                    break
+        # while (True):
+            # if (state=='state_choose_seed_action'):
+                # mnemonic= None
+                # passphrase= None
+                # seed= None
+                # needs_confirm= None
+                # use_passphrase= None
+                # (event, values)= self.handler.choose_seed_action()
+                # label= values['label']
+                # export_rights= values['export_rights']
+                # if (event =='Next') and (values['create'] is True):
+                    # state='state_create_seed'
+                # elif (event =='Next') and (values['restore'] is True):
+                    # state= 'state_restore_from_seed'
+                # else: # cancel
+                    # state= 'state_abort'
+                    # break
                     
-            elif (state=='state_create_seed'):
-                needs_confirm= False
-                MNEMONIC = Mnemonic(language="english")
-                mnemonic = MNEMONIC.generate(strength=128)
-                if MNEMONIC.check(mnemonic):    
-                    (event, values)= self.request('create_seed', mnemonic)
-                    if (event=='Next') and (values['use_passphrase'] is True):
-                        use_passphrase= True
-                        state= 'state_request_passphrase'
-                    elif (event=='Next') and not values['use_passphrase']:
-                        use_passphrase= False
-                        if (needs_confirm):
-                            state= 'state_confirm_seed'
-                        else:
-                            break
-                    else: #Back
-                        state= 'state_choose_seed_action'
-                else:  #should not happen
-                    #raise ValueError("Invalid BIP39 seed!")
-                    logger.warning("Invalid BIP39 seed!")
-                    self.request('show_error', "Invalid BIP39 seed!")
-                    state= 'state_choose_seed_action'
+            # elif (state=='state_create_seed'):
+                # needs_confirm= False
+                # MNEMONIC = Mnemonic(language="english")
+                # mnemonic = MNEMONIC.generate(strength=128)
+                # if MNEMONIC.check(mnemonic):    
+                    # (event, values)= self.request('create_seed', mnemonic)
+                    # if (event=='Next') and (values['use_passphrase'] is True):
+                        # use_passphrase= True
+                        # state= 'state_request_passphrase'
+                    # elif (event=='Next') and not values['use_passphrase']:
+                        # use_passphrase= False
+                        # if (needs_confirm):
+                            # state= 'state_confirm_seed'
+                        # else:
+                            # break
+                    # else: #Back
+                        # state= 'state_choose_seed_action'
+                # else:  #should not happen
+                    # #raise ValueError("Invalid BIP39 seed!")
+                    # logger.warning("Invalid BIP39 seed!")
+                    # self.request('show_error', "Invalid BIP39 seed!")
+                    # state= 'state_choose_seed_action'
                 
-            elif (state=='state_request_passphrase'):                        
-                (event, values)= self.request('request_passphrase')
-                if (event=='Next'):
-                    passphrase= values['passphrase']
-                    if (needs_confirm):
-                        state= 'state_confirm_seed'
-                    else:
-                       break #finished
-                else: #Back
-                    state= 'state_choose_seed_action'
+            # elif (state=='state_request_passphrase'):                        
+                # (event, values)= self.request('request_passphrase')
+                # if (event=='Next'):
+                    # passphrase= values['passphrase']
+                    # if (needs_confirm):
+                        # state= 'state_confirm_seed'
+                    # else:
+                       # break #finished
+                # else: #Back
+                    # state= 'state_choose_seed_action'
                 
-            elif (state=='state_confirm_seed'):               
-                (event, values)= self.request('confirm_seed')
-                mnemonic_confirm= values['seed_confirm']
-                if (event=='Next') and (mnemonic== mnemonic_confirm):
-                    if (use_passphrase):
-                        state= 'state_confirm_passphrase'
-                    else:
-                        break #finish!
-                elif (event=='Next') and (mnemonic!= mnemonic_confirm):
-                    self.request('show_error','Seed mismatch!')
-                    state= 'state_choose_seed_action'
-                else:
-                    state= 'state_choose_seed_action'
+            # elif (state=='state_confirm_seed'):               
+                # (event, values)= self.request('confirm_seed')
+                # mnemonic_confirm= values['seed_confirm']
+                # if (event=='Next') and (mnemonic== mnemonic_confirm):
+                    # if (use_passphrase):
+                        # state= 'state_confirm_passphrase'
+                    # else:
+                        # break #finish!
+                # elif (event=='Next') and (mnemonic!= mnemonic_confirm):
+                    # self.request('show_error','Seed mismatch!')
+                    # state= 'state_choose_seed_action'
+                # else:
+                    # state= 'state_choose_seed_action'
                     
-            elif (state=='state_confirm_passphrase'):            
-                (event, values)= self.request('confirm_passphrase')
-                passphrase_confirm= values['passphrase_confirm']
-                if (event=='Next') and (passphrase== passphrase_confirm):
-                    break #finish!
-                elif (event=='Next') and (passphrase!= passphrase_confirm):
-                    self.request('show_error','Passphrase mismatch!')
-                    state= 'state_choose_seed_action'
-                else:
-                    state= 'state_choose_seed_action'
+            # elif (state=='state_confirm_passphrase'):            
+                # (event, values)= self.request('confirm_passphrase')
+                # passphrase_confirm= values['passphrase_confirm']
+                # if (event=='Next') and (passphrase== passphrase_confirm):
+                    # break #finish!
+                # elif (event=='Next') and (passphrase!= passphrase_confirm):
+                    # self.request('show_error','Passphrase mismatch!')
+                    # state= 'state_choose_seed_action'
+                # else:
+                    # state= 'state_choose_seed_action'
             
-            elif (state== 'state_restore_from_seed'):
-                needs_confirm= False
-                (event, values)= self.request('restore_from_seed')
-                mnemonic= values['seed']
-                use_passphrase= values['use_passphrase']
-                if (event=='Next') and use_passphrase:
-                    state= 'state_request_passphrase'
-                elif (event=='Next') and not use_passphrase:
-                    break #finished!
-                else: #Back
-                    state= 'state_choose_seed_action'
+            # elif (state== 'state_restore_from_seed'):
+                # needs_confirm= False
+                # (event, values)= self.request('restore_from_seed')
+                # mnemonic= values['seed']
+                # use_passphrase= values['use_passphrase']
+                # if (event=='Next') and use_passphrase:
+                    # state= 'state_request_passphrase'
+                # elif (event=='Next') and not use_passphrase:
+                    # break #finished!
+                # else: #Back
+                    # state= 'state_choose_seed_action'
             
-            else:
-                logger.warning('State error!')
+            # else:
+                # logger.warning('State error!')
         
-        # if mnemonic is None:
-            # self.request('show_message', "Seed initialization aborted! \nYour Satochip may be unusable until a seed is created... \n Go to 'menu' -> 'Setup new Satochip' to complete setup")
-        passphrase='' if passphrase is None else passphrase
-        seed= Mnemonic.to_seed(mnemonic, passphrase) if mnemonic else None
-        #print('mnemonic: '+ str(mnemonic))
-        #print('passphrase: '+str(passphrase))
-        #print('seed: '+str(seed.hex()))
+        # # if mnemonic is None:
+            # # self.request('show_message', "Seed initialization aborted! \nYour Satochip may be unusable until a seed is created... \n Go to 'menu' -> 'Setup new Satochip' to complete setup")
+        # passphrase='' if passphrase is None else passphrase
+        # seed= Mnemonic.to_seed(mnemonic, passphrase) if mnemonic else None
+        # #print('mnemonic: '+ str(mnemonic))
+        # #print('passphrase: '+str(passphrase))
+        # #print('seed: '+str(seed.hex()))
         
-        return (mnemonic, passphrase, seed, label, export_rights)
+        # return (mnemonic, passphrase, seed, label, export_rights)
     
     def  get_secret_header_list(self):
         # get a list of all the secrets & pubkeys available
@@ -620,6 +661,7 @@ class Client:
         id_list=[]
         label_pubkey_list=['None (export to plaintext)']
         id_pubkey_list=[None]
+        fingerprint_pubkey_list=[]
         try:
             headers= self.cc.seedkeeper_list_secret_headers()
             for header_dic in headers:
@@ -628,11 +670,22 @@ class Client:
                 if header_dic['type']==0x70:
                     pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
                     pubkey= pubkey_dic['secret_hex'][2:10]
-                    label_pubkey_list.append('Public Key: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
+                    label_pubkey_list.append('In SeedKeeper: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
                     id_pubkey_list.append( header_dic['id'] )
+                    fingerprint_pubkey_list.append(header_dic['fingerprint'])
         except Exception as ex:      
             logger.error(f"Error during secret header listing: {ex}")
             #self.show_error(f'Error during secret export: {ex}')
             #return None
         
+        # add authentikeys from Truststore
+        for authentikey, card_label in self.truststore.items():
+            authentikey_bytes= bytes.fromhex(authentikey)
+            secret= bytes([len(authentikey_bytes)]) + authentikey_bytes
+            fingerprint= hashlib.sha256(secret).hexdigest()[0:8]
+            if fingerprint not in fingerprint_pubkey_list:
+                keyvalue = 'In Truststore: ' + fingerprint + ': ' + card_label + 'authentikey' +": "+ authentikey[0:8] + "..."
+                label_pubkey_list.append(keyvalue)
+                id_pubkey_list.append(authentikey)
+         
         return label_list, id_list, label_pubkey_list, id_pubkey_list

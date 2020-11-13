@@ -35,16 +35,15 @@ cc = CardConnector(client, logger.getEffectiveLevel())
 time.sleep(1) # give some time to initialize reader...
 
 while(True):
-    
+        
     #client.card_init_connect()
     if (client.new_card_present):
         client.new_card_present= not client.card_init_connect()
-        
+    time.sleep(0.1) # give some time to initialize reader...
+    
     event= handler.main_menu()
     logger.debug("Event: "+ str(event))
     
-    # todo: switch seedkeeper cards...
-    #todo: backup seedkeeper
     if event == 'Generate a new seed':
         client.generate_seed()    
     elif  event == 'Import a Secret':
