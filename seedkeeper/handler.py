@@ -778,6 +778,7 @@ class HandlerSimpleGUI:
        
     
     def about_menu(self):
+    
         logger.debug('In about_menu')
         msg_copyright= ''.join([ '(c)2020 - Satochip by Toporin - https://github.com/Toporin/ \n',
                                                         "This program is licensed under the GNU Lesser General Public License v3.0 \n",
@@ -855,7 +856,8 @@ class HandlerSimpleGUI:
                                     [sg.Text('Firmware version: ', size=(20, 1)), sg.Text(fw_rel)],
                                     [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)],
                                     [sg.Text('Authentikey: ', size=(20, 1)), sg.Text(authentikey_comp)],
-                                    [sg.Button('Add Authentikey to TrustStore', key='add_authentikey', size= (20,1) )]]
+                                    #[sg.Button('Add Authentikey to TrustStore', key='add_authentikey', size= (20,1) )]],
+                                    [sg.Button('Show TrustStore', key='show_truststore', size= (20,1) )]]
         frame_layout2= [
                                     [sg.Text('Supported version (SeedKeeper): ', size=(20, 1)), sg.Text(sw_rel_seedkeeper)],
                                     [sg.Text('Supported version (Satochip): ', size=(20, 1)), sg.Text(sw_rel_satochip)],
@@ -870,19 +872,37 @@ class HandlerSimpleGUI:
         
         while True:
             event, values = window.read() 
-            if event== 'add_authentikey':
-                if authentikey is None:
-                    self.show_error('No authentikey available!')
-                elif authentikey in self.client.truststore:
-                    self.show_success('Authentikey already in TrustStore!')
+            if event== 'show_truststore':
+                headings=['Card label', 'Authentikey']
+                truststore_list=[]
+                for authentikey, card_label in self.client.truststore.items():
+                    truststore_list.append([card_label, authentikey])
+                if len(truststore_list)>0:
+                    layout2 = [
+                          [sg.Table(truststore_list, headings=headings, auto_size_columns=False, col_widths=[25, 65] )], #todo: could not manage to set column size
+                          [sg.Button('Ok')],
+                        ]
                 else:
-                    #self.client.truststore+=[authentikey]
-                    self.client.truststore[authentikey]= card_label
-                    self.show_success('Authentikey added to TrustStore!')
+                    layout2 = [
+                          [sg.Text('TrustStore is empty!', size=(20, 1))],
+                          [sg.Button('Ok')],
+                        ]
+                window2 = sg.Window('SeedKeeperUtil TrustStore', layout2, icon=self.satochip_icon, finalize=True)  #ok
+                event2, values2 = window2.read()    
+                window2.close()  
+                del window2        
+            # if event== 'add_authentikey':
+                # if authentikey is None:
+                    # self.show_error('No authentikey available!')
+                # elif authentikey in self.client.truststore:
+                    # self.show_success('Authentikey already in TrustStore!')
+                # else:
+                    # #self.client.truststore+=[authentikey]
+                    # self.client.truststore[authentikey]= card_label
+                    # self.show_success('Authentikey added to TrustStore!')
             if event=='Ok' or event=='Cancel':
                 break
         
-        #event, values = window.read()    
         window.close()  
         del window
     
