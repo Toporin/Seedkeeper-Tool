@@ -407,18 +407,19 @@ class HandlerSimpleGUI:
     def import_secret_authentikey(self):
         logger.debug("import_secret_authentikey")
         
-        list_from_dic=[]
-        list_authentikey=[]
-        #list_card_label=[]
-        for authentikey, card_label in self.client.truststore.items():
-            keyvalue = card_label +" - "+ authentikey[0:8] + "..." + authentikey[-8:]
-            list_from_dic.append(keyvalue)
-            list_authentikey.append(authentikey)
-            #list_card_label.append(card_label)
+        list_authentikey_label, list_authentikey= self.client.get_truststore_list()
+        # list_from_dic=[]
+        # list_authentikey=[]
+        # #list_card_label=[]
+        # for authentikey, card_label in self.client.truststore.items():
+            # keyvalue = card_label +" - "+ authentikey[0:8] + "..." + authentikey[-8:]
+            # list_from_dic.append(keyvalue)
+            # list_authentikey.append(authentikey)
+            # #list_card_label.append(card_label)
         
         layout = [
             [sg.Text('Choose the authentikey you wish to import from TrustStore: ', size=(60, 1))],
-            [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(list_from_dic, key='authentikey', size=(40, 1))],
+            [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(list_authentikey_label, key='authentikey', size=(40, 1))],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(40, 1))],
             #[sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
@@ -429,7 +430,7 @@ class HandlerSimpleGUI:
         del window
         
         values['export_rights']= 'Export in plaintext allowed' # a public key should be exportable in plaintext for audit purpose...
-        values['authentikey']= list_authentikey[list_from_dic.index(values['authentikey'])] 
+        values['authentikey']= list_authentikey[list_authentikey_label.index(values['authentikey'])] 
         #values['card_label']= list_card_label[list_authentikey.index(values['authentikey'])] 
         return event, values
     
@@ -486,12 +487,11 @@ class HandlerSimpleGUI:
                     authentikey= sid_pubkey
                     authentikey_list= list( bytes.fromhex(authentikey) )
                     secret= [len(authentikey_list)] + authentikey_list
-                    label= self.client.truststore[authentikey] + ' authentikey'
-                    export_rights= 'Export in plaintext allowed'
-                    header= self.client.make_header('Authentikey from TrustStore', export_rights, label)
+                    label= self.client.truststore.get(authentikey,{}).get('card_label', '') + ' authentikey'#self.client.truststore[authentikey] + ' authentikey'
+                    header= self.client.make_header('Authentikey from TrustStore', 'Export in plaintext allowed', label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
-                    self.show_notification('Information: ', f"Authentikey '{label}' successfully imported with id {sid_pubkey}")
+                    self.show_notification('Information: ', f"Authentikey '{label}' imported from TrustStore with id {sid_pubkey}")
                     #todo: update (label_list, id_list, label_pubkey_list, id_pubkey_list)
                     
                 try: 
@@ -637,11 +637,11 @@ class HandlerSimpleGUI:
                         authentikey_importer= sid_pubkey
                         authentikey_list= list( bytes.fromhex(authentikey_importer) )
                         secret= [len(authentikey_list)] + authentikey_list
-                        label= self.client.truststore[authentikey_importer] + ' authentikey'
+                        label= self.client.truststore.get(authentikey_importer,{}).get('card_label', '') + ' authentikey' #self.client.truststore[authentikey_importer] + ' authentikey'
                         header= self.client.make_header('Authentikey from TrustStore',  'Export in plaintext allowed', label)
                         secret_dic={'header':header, 'secret':secret}
                         (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
-                        self.show_notification('Information: ', f"Pubkey successfully imported from TrustStore with id {sid_pubkey}")
+                        self.show_notification('Information: ', f"Authentikey '{label} imported from TrustStore with id {sid_pubkey}")
                     except Exception as ex:
                         logger.warning('Exception during pubkey export: '+str(ex))
                         authentikey_importer= "(unknown)"
@@ -857,7 +857,7 @@ class HandlerSimpleGUI:
                 authentikey_pubkey= self.client.cc.card_export_authentikey() # self.client.authentikey #
                 authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
                 authentikey= authentikey_bytes.hex()
-                authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=False).hex()[0:66]+'...'
+                authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=True).hex()
             except UninitializedSeedError:
                 authentikey= None
                 authentikey_comp= "This SeedKeeper is not initialized!"
@@ -878,7 +878,6 @@ class HandlerSimpleGUI:
                                     [sg.Text('Firmware version: ', size=(20, 1)), sg.Text(fw_rel)],
                                     [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)],
                                     [sg.Text('Authentikey: ', size=(20, 1)), sg.Text(authentikey_comp)],
-                                    #[sg.Button('Add Authentikey to TrustStore', key='add_authentikey', size= (20,1) )]],
                                     [sg.Button('Show TrustStore', key='show_truststore', size= (20,1) )]]
         frame_layout2= [
                                     [sg.Text('Supported version (SeedKeeper): ', size=(20, 1)), sg.Text(sw_rel_seedkeeper)],
@@ -895,13 +894,16 @@ class HandlerSimpleGUI:
         while True:
             event, values = window.read() 
             if event== 'show_truststore':
-                headings=['Card label', 'Authentikey']
+                headings=['Fingerprint', 'Card label', 'Authentikey']
                 truststore_list=[]
-                for authentikey, card_label in self.client.truststore.items():
-                    truststore_list.append([card_label, authentikey])
+                for authentikey, dic_info in self.client.truststore.items():
+                    fingerprint= dic_info['fingerprint']
+                    card_label= dic_info['card_label']
+                    authentikey_comp= dic_info['authentikey_comp']
+                    truststore_list.append([fingerprint, card_label, authentikey_comp])
                 if len(truststore_list)>0:
                     layout2 = [
-                          [sg.Table(truststore_list, headings=headings, auto_size_columns=False, col_widths=[25, 65] )], #todo: could not manage to set column size
+                          [sg.Table(truststore_list, headings=headings, auto_size_columns=False, col_widths=[10, 25, 65] )], #todo: could not manage to set column size
                           [sg.Button('Ok')],
                         ]
                 else:
@@ -913,15 +915,6 @@ class HandlerSimpleGUI:
                 event2, values2 = window2.read()    
                 window2.close()  
                 del window2        
-            # if event== 'add_authentikey':
-                # if authentikey is None:
-                    # self.show_error('No authentikey available!')
-                # elif authentikey in self.client.truststore:
-                    # self.show_success('Authentikey already in TrustStore!')
-                # else:
-                    # #self.client.truststore+=[authentikey]
-                    # self.client.truststore[authentikey]= card_label
-                    # self.show_success('Authentikey added to TrustStore!')
             if event=='Ok' or event=='Cancel':
                 break
         
@@ -1244,6 +1237,12 @@ class HandlerSimpleGUI:
                 check_mnemonic(mnemonic_type, mnemonic)
                 
             elif event=='Submit':
+                # check label
+                if len(values['label']) >127:
+                    window['on_error'].update(text_color='red' )
+                    window['on_error'].update('Label length should be strictly lower than 128!')
+                    continue
+                # check mnemonic    
                 mnemonic_type=  values['mnemonic_type']
                 mnemonic= values['mnemonic']
                 if use_passphrase:
