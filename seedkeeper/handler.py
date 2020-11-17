@@ -262,20 +262,20 @@ class HandlerSimpleGUI:
     def generate_new_seed(self):
         logger.debug('In generate_new_seed')
         layout = [
-            [sg.Text('Please enter seed settings below: ')],
+            [sg.Text('Please enter masterseed settings below: ')],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(20, 1))],
             [sg.Text('Size: ', size=(10, 1)), sg.InputCombo(('16 bytes' , '32 bytes', '48 bytes', '64 bytes'), key='size', size=(20, 1))],
             [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
         ]   
         window = sg.Window('Confirmation required', layout, icon=self.satochip_icon)  #ok
-
         event, values = window.read()    
         window.close()  
         del window
         
-        logger.debug("Type of event from getpass:"+str(type(event))+str(event))
-        logger.debug("Type of values from getpass:"+str(type(values))+str(values))
+        # check label 
+        if len(values['label']) >127: 
+            values['label']= values['label'][0:127]
         return event, values
         
     def import_secret_menu(self):
@@ -349,7 +349,7 @@ class HandlerSimpleGUI:
     def choose_masterseed_from_list(self, masterseed_list):
         logger.debug("In choose_masterseed_from_list")
         layout = [
-                      [sg.Text('Choose the Masterseed to import from this list:', size=(60,1))],
+                      [sg.Text('Choose the masterseed to import from this list:', size=(60,1))],
                       [sg.Listbox( masterseed_list, key='masterseed_list', select_mode=sg.LISTBOX_SELECT_MODE_SINGLE, size=(60, 8))],
                       [sg.Submit(), sg.Cancel()],
                     ]
@@ -377,23 +377,24 @@ class HandlerSimpleGUI:
                 break      
             elif event == 'Submit':    
                 try:
+                    #check pubkey
                     pubkey= values['pubkey']
                     int(pubkey, 16) # check if correct hex
                     pubkey= pubkey[pubkey.startswith("0x") and len("0x"):] #strip '0x' if need be
-                    
                     if len(pubkey) not in [66, 130]:
                         raise ValueError(f"Wrong pubkey length: {len(pubkey)} (should be 66 or 130 hex characters)")
                     elif len(pubkey)== 130 and not pubkey.startswith("04"):
                         raise ValueError(f"Wrong pubkey: uncompressed pubkey should start with '04' ")
                     elif len(pubkey)== 66 and not ( pubkey.startswith("02") or pubkey.startswith("03") ):
                         raise ValueError(f"Wrong pubkey: compressed pubkey should start with '02' or '03' ")
-                        
                     if len(pubkey)==66: #compressed pubkey
                         #window['-OUTPUT-'].update('WARNING: compressed pubkeys have only limited support')
                         proceed= self.yes_no_question('WARNING: compressed pubkeys have only limited support.\nAre you sure you want to proceed?')
                         if not proceed:
                             continue
-                            
+                    #check label
+                    if len(values['label']) >127:
+                        raise ValueError(f'Label length should be strictly lower than 128!')
                     break
                 except ValueError as ex: # wrong hex value
                     window['-OUTPUT-'].update(str(ex)) #update('Error: seed should be an hex string with the correct length!')
@@ -429,6 +430,8 @@ class HandlerSimpleGUI:
         window.close()  
         del window
         
+        if len(values['label']) >127: # check label 
+            values['label']= values['label'][0:127]
         values['export_rights']= 'Export in plaintext allowed' # a public key should be exportable in plaintext for audit purpose...
         values['authentikey']= list_authentikey[list_authentikey_label.index(values['authentikey'])] 
         #values['card_label']= list_card_label[list_authentikey.index(values['authentikey'])] 
@@ -449,6 +452,10 @@ class HandlerSimpleGUI:
         event, values = window.read()    
         window.close()  
         del window
+        
+        # check label 
+        if len(values['label']) >127:
+            values['label']= values['label'][0:127]
         return event, values
             
     def export_secret(self):
@@ -920,211 +927,6 @@ class HandlerSimpleGUI:
         
         window.close()  
         del window
-    
-####################################
-#            SATOCHIP                               
-####################################
-     
-    # def QRDialog(self, data, parent=None, title = "QR code", show_text=False, msg= ''):
-        # logger.debug('In QRDialog')
-        # import pyqrcode
-        # code = pyqrcode.create(data)
-        # image_as_str = code.png_as_base64_str(scale=5, quiet_zone=2) #string
-        # image_as_str= base64.b64decode(image_as_str) #bytes
-        
-        # layout = [[sg.Image(data=image_as_str, tooltip=None, visible=True)],
-                        # [sg.Text(msg)],
-                        # [sg.Button('Ok'), sg.Button('Cancel'), sg.Button('Copy 2FA-secret to clipboard')]]     
-        # window = sg.Window(title, layout, icon=self.satochip_icon)    
-        # while True:
-            # event, values = window.read()    
-            # if event=='Ok' or event=='Cancel':
-                # break
-            # elif event=='Copy 2FA-secret to clipboard':
-                # pyperclip.copy(data) 
-                
-        # window.close()
-        # del window
-        # pyperclip.copy('') #purge 2FA from clipboard
-        # # logger.debug("Event:"+str(type(event))+str(event))
-        # # logger.debug("Values:"+str(type(values))+str(values))
-        # return (event, values)
-    
-    # def reset_seed_dialog(self, msg):
-        # logger.debug('In reset_seed_dialog')
-        # layout = [[sg.Text(msg)],
-                # [sg.InputText(password_char='*', key='pin')], 
-                # [sg.Checkbox('Also reset 2FA', key='reset_2FA')], 
-                # [sg.Button('Ok'), sg.Button('Cancel')]]
-        # window = sg.Window("Reset seed", layout, icon=self.satochip_icon)    
-        # event, values = window.read()    
-        # window.close()
-        # del window
-        
-        # # logger.debug("Event:"+str(type(event))+str(event))
-        # # logger.debug("Values:"+str(type(values))+str(values))
-        # #Event:<class 'str'>Ok
-        # #Values:<class 'dict'>{'passphrase': 'toto', 'reset_2FA': False}
-        # return (event, values)
-    
-    # ### SEED Config ###
-    # def choose_seed_action(self):
-        # logger.debug('In choose_seed_action')
-        # layout = [
-            # [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(40, 1))],
-            # [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
-            # [sg.Text("")],
-            # [sg.Text("Do you want to create a new seed, or to restore a wallet using an existing seed?")],
-            # [sg.Radio('Create a new seed', 'radio1', key='create')], 
-            # [sg.Radio('I already have a seed', 'radio1', key='restore')], 
-            # [sg.Button('Cancel'), sg.Button('Next')]
-        # ]
-        # window = sg.Window("Create or restore seed", layout, icon=self.satochip_icon)        
-        # event, values = window.read()    
-        # window.close()
-        # del window
-        
-        # logger.debug("Event:"+str(type(event))+str(event))
-        # logger.debug("Values:"+str(type(values))+str(values))
-        # #Event:<class 'str'>Next
-        # #Values:<class 'dict'>{'create': True, 'restore': False}
-        # return (event, values)
-        
-    # def create_seed(self, seed):    
-        # logger.debug('In create_seed')
-        # warning1= ("Please save these 12 words on paper (order is important). \nThis seed will allow you to recover your wallet in case of computer failure.")
-        # warning2= ("WARNING:")
-        # warning3= ("*Never disclose your seed.\n*Never type it on a website.\n*Do not store it electronically.")
-        
-        # layout = [[sg.Text("Your wallet generation seed is:")],
-                # [sg.Multiline(seed, size=(60,3))], #[sg.Text(seed)], 
-                # [sg.Checkbox('Extends this seed with custom words', key='use_passphrase')], 
-                # [sg.Text(warning1)],
-                # [sg.Text(warning2)],
-                # [sg.Text(warning3)],
-                # [sg.Button('Back'), sg.Button('Next'), sg.Button('Copy seed to clipboard')]]
-        # window = sg.Window("Create seed", layout, icon=self.satochip_icon)        
-        # while True:
-            # event, values = window.read()    
-            # if event=='Back' or event=='Next' :
-                # break
-            # elif event=='Copy seed to clipboard':
-                # try:
-                    # pyperclip.copy(seed)
-                # except PyperclipException as e:
-                    # logger.warning("PyperclipException: "+ str(e))
-                    # self.client.request('show_error', "PyperclipException: "+ str(e))
-        # window.close()
-        # del window
-        
-        # logger.debug("Event:"+str(type(event))+str(event))
-        # logger.debug("Values:"+str(type(values))+str(values))
-        # #Event:<class 'str'>Next
-        # #Values:<class 'dict'>{'use_passphrase': False}
-        # return (event, values)
-        
-    # def request_passphrase(self):
-        # logger.debug('In request_passphrase')
-        # info1= ("You may extend your seed with custom words.\nYour seed extension must be saved together with your seed.")
-        # info2=("Note that this is NOT your encryption password.\nIf you do not know what this is, leave this field empty.")
-        # layout = [[sg.Text("Seed extension")],
-                # [sg.Text(info1)], 
-                # [sg.InputText(key='passphrase')], 
-                # [sg.Text(info2)],
-                # [sg.Button('Back'), sg.Button('Next')]]
-        # window = sg.Window("Seed extension", layout, icon=self.satochip_icon)        
-        # event, values = window.read()    
-        # window.close()
-        # del window
-        
-        # logger.debug("Event:"+str(type(event))+str(event))
-        # logger.debug("Values:"+str(type(values))+str(values))
-        # #Event:<class 'str'>Next
-        # #Values:<class 'dict'>{'passphrase': 'toto'}
-        # return (event, values)
-        
-        
-    # def confirm_seed(self):
-        # logger.debug('In confirm_seed')
-        # pyperclip.copy('') #purge clipboard to ensure that seed is backuped
-        # info1= ("Your seed is important! If you lose your seed, your money will be \npermanently lost. To make sure that you have properly saved your \nseed, please retype it here:")
-        # layout = [[sg.Text("Confirm seed")],
-                # [sg.Text(info1)], 
-                # [sg.InputText(key='seed_confirm')], 
-                # [sg.Button('Back'), sg.Button('Next')]]
-        # window = sg.Window("Confirm seed", layout, icon=self.satochip_icon)        
-        # event, values = window.read()    
-        # window.close()
-        # del window
-        
-        # logger.debug("Event:"+str(type(event))+str(event))
-        # logger.debug("Values:"+str(type(values))+str(values))
-        # #Event:<class 'str'>Next
-        # #Values:<class 'dict'>{'seed_confirm': 'AA ZZ'}
-        # return (event, values)
-        
-    # def confirm_passphrase(self):
-        # logger.debug('In confirm_passphrase')
-        # info1= ("Your seed extension must be saved together with your seed.\nPlease type it here.")
-        # layout = [[sg.Text("Confirm seed extension")],
-                # [sg.Text(info1)], 
-                # [sg.InputText(key='passphrase_confirm')], 
-                # [sg.Button('Back'), sg.Button('Next')]]
-        # window = sg.Window("Confirm seed extension", layout, icon=self.satochip_icon)        
-        # event, values = window.read()    
-        # window.close()
-        # del window
-        
-        # logger.debug("Event:"+str(type(event))+str(event))
-        # logger.debug("Values:"+str(type(values))+str(values))
-        # #Event:<class 'str'>Next
-        # #Values:<class 'dict'>{'seed_confirm': 'AA ZZ'}
-        # return (event, values)
-        
-    # def restore_from_seed(self):
-        # logger.debug('In restore_from_seed')
-        # from mnemonic import Mnemonic
-        # MNEMONIC = Mnemonic(language="english")
-        
-        # info1= ("Please enter your BIP39 seed phrase in order to restore your wallet.")
-        # layout = [[sg.Text("Enter Seed")],
-                # [sg.Text(info1)], 
-                # [sg.InputText(key='seed')], 
-                # [sg.Checkbox('Extends this seed with custom words', key='use_passphrase')], 
-                # [sg.Button('Back'), sg.Button('Next')]]
-        # window = sg.Window("Enter seed", layout, icon=self.satochip_icon)        
-        # while True:
-            # event, values = window.read()    
-            # if event=='Next' :
-                # if not MNEMONIC.check(values['seed']):# check that seed is valid
-                    # self.client.request('show_error', "Invalid BIP39 seed! Please type again!")
-                # else:
-                    # break            
-            # else: #  event=='Back'
-                # break
-        # window.close()
-        # del window
-        
-        # # logger.debug("Event:"+str(type(event))+str(event))
-        # # logger.debug("Values:"+str(type(values))+str(values))
-        # return (event, values)
-    
-    # # communicate with other threads through queues
-    # def reply(self):    
-        
-        # while not self.client.queue_request.empty(): 
-            # #logger.debug('Debug: check QUEUE NOT EMPTY')
-            # (request_type, args)= self.client.queue_request.get()
-            # logger.debug("Request in queue:" + str(request_type))
-            # for arg in args: 
-                # logger.debug("Next argument through *args :" + str(arg)) 
-            
-            # method_to_call = getattr(self, request_type)
-            # #logger.debug('Type of method_to_call: '+ str(type(method_to_call)))
-            # #logger.debug('method_to_call: '+ str(method_to_call))
-            
-            # reply = method_to_call(*args)
-            # self.client.queue_reply.put((request_type, reply))
     
     def mnemonic_wizard(self):
         logger.debug('In mnemonic_wizard')
