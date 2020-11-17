@@ -142,14 +142,12 @@ class HandlerSimpleGUI:
         logger.debug('In yes_no_question')
         layout = [[sg.Text(question)],      
                         [sg.Button('Yes'), sg.Button('No')]]      
-        #window = sg.Window('Confirmation required', layout, icon=SatochipBase64)    #NOK
         window = sg.Window('Confirmation required', layout, icon=self.satochip_icon)  #ok
         #window = sg.Window('Confirmation required', layout, icon="satochip.ico")    #ok
         event, values = window.read()    
         window.close()  
         del window
         
-        #logger.debug("Type of event from getpass:"+str(type(event))+str(event))
         if event=='Yes':
             return True
         else: # 'No' or None
@@ -167,8 +165,7 @@ class HandlerSimpleGUI:
         
         is_PIN= True if event=='Submit' else False 
         pin = values['pin']
-        # logger.debug("Type of pin from getpass:"+str(type(pin)))
-        # logger.debug("Type of event from getpass:"+str(type(event))+str(event))
+
         return (is_PIN, pin)
     
     def get_data(self, msg): 
@@ -234,14 +231,14 @@ class HandlerSimpleGUI:
         
         disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=disabled7=disabled8=False
         color1=color2=color3=color4=color5=color6=color7=color8=button_color_enabled
-        # if self.client.cc.card_type=='SeedKeeper':
-            # pass
-        # elif self.client.cc.card_type=='Satochip':
-            # disabled1=disabled3=disabled4=disabled5=disabled6=True
-            # color1=color3=color4=color5=color6=button_color_disabled
-        # else:
-            # disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=True
-            # color1=color2=color3=color4=color5=color6=button_color_disabled
+        if self.client.cc.card_type=='SeedKeeper':
+            pass
+        elif self.client.cc.card_type=='Satochip':
+            disabled1=disabled3=disabled4=disabled5=disabled6=True
+            color1=color3=color4=color5=color6=button_color_disabled
+        else:
+            disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=True
+            color1=color2=color3=color4=color5=color6=button_color_disabled
         
         layout = [[sg.Text('Welcome to SeedKeeper Utility !')],  
                         #[sg.Text('Card inserted:' + str(self.client.cc.card_type))],          
@@ -268,7 +265,7 @@ class HandlerSimpleGUI:
             [sg.Text('Please enter seed settings below: ')],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(20, 1))],
             [sg.Text('Size: ', size=(10, 1)), sg.InputCombo(('16 bytes' , '32 bytes', '48 bytes', '64 bytes'), key='size', size=(20, 1))],
-            [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in clear allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
+            [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
         ]   
         window = sg.Window('Confirmation required', layout, icon=self.satochip_icon)  #ok
@@ -285,7 +282,7 @@ class HandlerSimpleGUI:
         logger.debug('In import_secret_menu')
         
         #import_list= ['BIP39 seed', 'Electrum seed', 'MasterSeed', 'Secure import from json', 'Public Key', 'Authentikey from TrustStore', 'Password']
-        import_list= ['Mnemonic phrase', 'MasterSeed', 'Secure import from json', 'Public Key', 'Authentikey from TrustStore', 'Password']
+        import_list= ['Mnemonic phrase', 'MasterSeed', 'Secure import from json', 'Authentikey from TrustStore', 'Public Key', 'Password']
         
         layout = [
             [sg.Text('Choose the type of secret you wish to import: ', size=(30, 1))],
@@ -304,7 +301,7 @@ class HandlerSimpleGUI:
         logger.debug("import_secret_masterseed")
         
         layout = [
-            [sg.Text('Enter the masterseed as a hex string with 32, 64, 96 or 128 characters: ', size=(40, 1))],
+            [sg.Text('Enter the masterseed as a hex string with 32, 64, 96 or 128 characters: ', size=(45, 1))],
             [sg.Text('Hex value: ', size=(10, 1)), sg.InputText(key='masterseed', size=(40, 1))],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(40, 1))],
             [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
@@ -325,7 +322,9 @@ class HandlerSimpleGUI:
                     if len(masterseed) not in [32, 64, 96, 128]:
                         raise ValueError(f"Wrong seed length: {len(masterseed)}")
                     values['masterseed']= masterseed
-                    #todo: limit label size to 127 max
+                    #limit label size to 127 max
+                    if len(values['label']) >127:
+                        raise ValueError(f"Label length should be strictly lower than 128")
                     break
                 except ValueError as ex: # wrong hex value
                     window['-OUTPUT-'].update(str(ex)) #update('Error: seed should be an hex string with the correct length!')
@@ -346,14 +345,27 @@ class HandlerSimpleGUI:
         window.close()  
         del window
         return event, values
+    
+    def choose_masterseed_from_list(self, masterseed_list):
+        logger.debug("In choose_masterseed_from_list")
+        layout = [
+                      [sg.Text('Choose the Masterseed to import from this list:', size=(60,1))],
+                      [sg.Listbox( masterseed_list, key='masterseed_list', select_mode=sg.LISTBOX_SELECT_MODE_SINGLE, size=(60, 8))],
+                      [sg.Submit(), sg.Cancel()],
+                    ]
+        window = sg.Window('SeedKeeperUtil', layout, icon=self.satochip_icon)  #ok
+        event, values = window.read()    
+        window.close()  
+        del window      
+        return event, values
         
     def import_secret_pubkey(self):    
-        logger.debug("import_secret_pubkey")
+        logger.debug("In import_secret_pubkey")
         layout = [
             [sg.Text('Enter the pubkey as a hex string: ', size=(40, 1))],
             [sg.Text('Hex value: ', size=(10, 1)), sg.InputText(key='pubkey', size=(68, 1))],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(40, 1))],
-            [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
+            #[sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Text(size=(64,1), key='-OUTPUT-')],
             [sg.Submit(), sg.Cancel()],
         ] 
@@ -388,6 +400,8 @@ class HandlerSimpleGUI:
                 
         window.close()
         del window
+        
+        values['export_rights']= 'Export in plaintext allowed' # a public key should be exportable in plaintext for audit purpose...
         return event, values
     
     def import_secret_authentikey(self):
@@ -406,7 +420,7 @@ class HandlerSimpleGUI:
             [sg.Text('Choose the authentikey you wish to import from TrustStore: ', size=(60, 1))],
             [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(list_from_dic, key='authentikey', size=(40, 1))],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(40, 1))],
-            [sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
+            #[sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
         ] 
         window = sg.Window('SeedKeeper: import secret - Step 2', layout, icon=self.satochip_icon)  #ok
@@ -414,6 +428,7 @@ class HandlerSimpleGUI:
         window.close()  
         del window
         
+        values['export_rights']= 'Export in plaintext allowed' # a public key should be exportable in plaintext for audit purpose...
         values['authentikey']= list_authentikey[list_from_dic.index(values['authentikey'])] 
         #values['card_label']= list_card_label[list_authentikey.index(values['authentikey'])] 
         return event, values
@@ -476,7 +491,8 @@ class HandlerSimpleGUI:
                     header= self.client.make_header('Authentikey from TrustStore', export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
-                    #self.handler.show_success(f"Secret successfully imported with id {sid_pubkey}")
+                    self.show_notification('Information: ', f"Authentikey '{label}' successfully imported with id {sid_pubkey}")
+                    #todo: update (label_list, id_list, label_pubkey_list, id_pubkey_list)
                     
                 try: 
                     secret_dict= self.client.cc.seedkeeper_export_secret(sid, sid_pubkey)
@@ -561,7 +577,7 @@ class HandlerSimpleGUI:
                                                     'fingerprint': secret_dict['fingerprint'], 
                                                     'header': bytes(secret_dict['header']).hex(), 
                                                     'iv': bytes(secret_dict['iv']).hex(), 
-                                                    'secret_encrypted': bytes(secret_list).hex(),  #'secret_base64':base64.encodebytes( bytes(secret_list) ).decode('utf8'), #todo: in hex?
+                                                    'secret_encrypted': bytes(secret_list).hex(),  #'secret_base64':base64.encodebytes( bytes(secret_list) ).decode('utf8')
                                                     'hmac': bytes(secret_dict['hmac']).hex(), 
                                                 }],
                                             }
@@ -606,28 +622,30 @@ class HandlerSimpleGUI:
             logger.debug(f"event: {event}")
             if event == 'Backup':  #if event != 'Exit'  and event != 'Cancel':      
                 
-                #get trusted authentikey in plain
-                try:
-                    label_pubkey= values['label_pubkey_list']
-                    sid_pubkey= id_pubkey_list[ label_pubkey_list.index(label_pubkey) ]
-                    secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
-                    authentikey_importer= secret_dict_pubkey['secret_hex'][2:]
-                except Exception as ex:
-                    logger.warning('Exception during pubkey export: '+str(ex))
-                    authentikey_importer= "(unknown)"
-                
-                # add authentikey from truststore to device if needed
-                if isinstance(sid_pubkey, str): 
-                    authentikey= sid_pubkey
-                    authentikey_list= list( bytes.fromhex(authentikey) )
-                    secret= [len(authentikey_list)] + authentikey_list
-                    label= self.client.truststore[authentikey] + ' authentikey'
-                    export_rights= 'Export in plaintext allowed'
-                    header= self.client.make_header('Authentikey from TrustStore', export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
-                    (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
-                    #self.handler.show_success(f"Secret successfully imported with id {sid_pubkey}")
-                
+                #get trusted authentikey from device or truststore
+                label_pubkey= values['label_pubkey_list']
+                sid_pubkey= id_pubkey_list[ label_pubkey_list.index(label_pubkey) ]
+                if isinstance(sid_pubkey, int): # from device
+                    try:
+                        secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
+                        authentikey_importer= secret_dict_pubkey['secret_hex'][2:]
+                    except Exception as ex:
+                        logger.warning('Exception during pubkey export: '+str(ex))
+                        authentikey_importer= "(unknown)"
+                elif isinstance(sid_pubkey, str): #from truststore 
+                    try:
+                        authentikey_importer= sid_pubkey
+                        authentikey_list= list( bytes.fromhex(authentikey_importer) )
+                        secret= [len(authentikey_list)] + authentikey_list
+                        label= self.client.truststore[authentikey_importer] + ' authentikey'
+                        header= self.client.make_header('Authentikey from TrustStore',  'Export in plaintext allowed', label)
+                        secret_dic={'header':header, 'secret':secret}
+                        (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
+                        self.show_notification('Information: ', f"Pubkey successfully imported from TrustStore with id {sid_pubkey}")
+                    except Exception as ex:
+                        logger.warning('Exception during pubkey export: '+str(ex))
+                        authentikey_importer= "(unknown)"
+                        
                 # secret exported as json
                 secrets_obj= {  
                         'authentikey_exporter': self.client.cc.parser.authentikey.get_public_key_bytes(False).hex(),
@@ -738,7 +756,7 @@ class HandlerSimpleGUI:
             self.show_error(f'Error during header listing: {ex}')
             return
             
-        #TODO: nice presentation instead of raw data
+        # nice presentation instead of raw data
         txt= f'Number of secrets stored: {len(headers)}'
         headings=['Id', 'Label', 'Type', 'Origin', 'Export rights', 'Nb plain exports', 'Nb encrypted exports', 'Nb secret exported', 'Fingerprint']
         dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
@@ -843,6 +861,10 @@ class HandlerSimpleGUI:
             except UninitializedSeedError:
                 authentikey= None
                 authentikey_comp= "This SeedKeeper is not initialized!"
+            except UnexpectedSW12Error as ex:
+                authentikey= None
+                authentikey_comp= str(ex)
+                #self.show_error(str(ex))
             #card label 
             try:
                 (response, sw1, sw2, card_label)= self.client.cc.card_get_label()
@@ -1229,7 +1251,7 @@ class HandlerSimpleGUI:
                 else:
                     passphrase= values['passphrase']=''
                 if check_mnemonic(mnemonic_type, mnemonic):
-                    #TODO: derive masterseed
+                    # also derive masterseed
                     if mnemonic_type=='BIP39 mnemonic' :
                         values['masterseed']= Mnemonic.to_seed(mnemonic, passphrase)
                     else:  #electrum_mnemonic   

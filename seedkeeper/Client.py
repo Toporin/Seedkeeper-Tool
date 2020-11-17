@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
                
 class Client:
-
+    
+    dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
+    
     def __init__(self, cc, handler, loglevel= logging.WARNING):
         logger.setLevel(loglevel)
         logger.debug("In __init__")
@@ -28,37 +30,37 @@ class Client:
         self.new_card_present= False
         self.card_label= ''
     
-    def request_threading(self, request_type, *args):
-        logger.debug('Client request: '+ str(request_type))
+    # def request_threading(self, request_type, *args):
+        # logger.debug('Client request: '+ str(request_type))
         
-        # bypass queue-based data exchange between main GUI thread and   
-        # server thread when request comes directly from the main thread.
-        if threading.current_thread() is threading.main_thread():
-            #TODO: check if handler exist
-            logger.debug('In main thread:')
-            method_to_call = getattr(self.handler, request_type)
-            #logger.debug('Type of method_to_call: '+ str(type(method_to_call)))
-            #logger.debug('Method_to_call: '+ str(method_to_call))
-            reply = method_to_call(*args)
-            return reply 
+        # # bypass queue-based data exchange between main GUI thread and   
+        # # server thread when request comes directly from the main thread.
+        # if threading.current_thread() is threading.main_thread():
+            # #TODO: check if handler exist
+            # logger.debug('In main thread:')
+            # method_to_call = getattr(self.handler, request_type)
+            # #logger.debug('Type of method_to_call: '+ str(type(method_to_call)))
+            # #logger.debug('Method_to_call: '+ str(method_to_call))
+            # reply = method_to_call(*args)
+            # return reply 
         
-        # we use a queue to exchange request between the server thread and the main (GUI) thread
-        self.queue_request.put((request_type, args))
-        logger.debug('In second thread:')
+        # # we use a queue to exchange request between the server thread and the main (GUI) thread
+        # self.queue_request.put((request_type, args))
+        # logger.debug('In second thread:')
         
-        # Get some data 
-        try:
-            #todo: check if several message are sent...
-            #(reply_type, reply)= self.queue_reply.get(block=True, timeout=5)  #TODO: check if blocking
-            (reply_type, reply)= self.queue_reply.get(block=True, timeout=None)  #TODO: check if blocking
-            if (reply_type != request_type):
-                # should not happen #todo: clean the queues
-                RuntimeError("Reply mismatch during GUI handler notification!")
-            else:
-                return reply
-        except Exception as exc:
-            self.request('show_error', "[Client] Exception in request(): "+repr(exc))
-            return None
+        # # Get some data 
+        # try:
+            # #todo: check if several message are sent...
+            # #(reply_type, reply)= self.queue_reply.get(block=True, timeout=5)  #TODO: check if blocking
+            # (reply_type, reply)= self.queue_reply.get(block=True, timeout=None)  #TODO: check if blocking
+            # if (reply_type != request_type):
+                # # should not happen #todo: clean the queues
+                # RuntimeError("Reply mismatch during GUI handler notification!")
+            # else:
+                # return reply
+        # except Exception as exc:
+            # self.request('show_error', "[Client] Exception in request(): "+repr(exc))
+            # return None
             
     def request(self, request_type, *args):
         logger.debug('Client request: '+ str(request_type))
@@ -263,7 +265,7 @@ class Client:
         else:
             self.truststore[authentikey_hex]= self.card_label
             #self.show_success('Authentikey added to TrustStore!')
-            self.handler.show_notification('Notification', f'Authentikey added to TrustStore! \n{authentikey_hex}')
+            self.handler.show_notification('Information: ', f'Authentikey added to TrustStore! \n{authentikey_hex}')
         
         # return true if wizard finishes correctly 
         return True
@@ -277,7 +279,7 @@ class Client:
         if event== 'Submit':
             logger.debug(values)
             label= values['label']
-            export_rights= 0x01 if (values['export_rights']=='Export in clear allowed') else 0x02
+            export_rights= 0x01 if (values['export_rights']=='Export in plaintext allowed') else 0x02
             size= int(values['size'].split(' ')[0])
             
             (response, sw1, sw2, id, fingerprint)= self.cc.seedkeeper_generate_masterseed(size, export_rights, label)
@@ -389,7 +391,8 @@ class Client:
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 else:
-                    self.handler.show_message(f"Operation cancelled")
+                    #self.handler.show_message(f"Operation cancelled")
+                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
                     return None
                     
             elif stype== 'Authentikey from TrustStore':
@@ -415,7 +418,8 @@ class Client:
                         self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' successfully imported to Satochip!")
                         return 0
                 else:
-                    self.handler.show_message(f"Operation cancelled")
+                    #self.handler.show_message(f"Operation cancelled")
+                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
                     return None
             
             elif stype== 'Password':
@@ -433,7 +437,8 @@ class Client:
                     self.handler.show_success(f"Secret successfully imported with id {sid}")
                     return sid
                 else:
-                    self.handler.show_message(f"Operation cancelled")
+                    #self.handler.show_message(f"Operation cancelled by user") 
+                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
                     return None
                 
             else:
@@ -494,7 +499,6 @@ class Client:
             headers= self.cc.seedkeeper_list_secret_headers()
             for header_dic in headers:
                 if header_dic['type']==0x70:
-                    #secret_dic= self.cc.seedkeeper_export_plain_secret(header_dic['id'])
                     secret_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
                     pubkey= secret_dic['secret_hex'][2:]
                     if pubkey== authentikey_exporter:
@@ -503,16 +507,32 @@ class Client:
                         break
             
             if sid_pubkey is None:
-                self.handler.show_error('Could not find a trusted pubkey matching '+ authentikey_exporter)
-                return None
+                #look in the truststore
+                card_label= self.truststore.get(authentikey_exporter, None)
+                if card_label is not None:
+                    yes_no= self.handler.yes_no_question(f'An authentikey matching {authentikey_exporter} has been found in the TrustStore with the label: {card_label}. \nContinue import with this authentikey?')
+                    if yes_no:
+                        pubkey_list= list( bytes.fromhex(authentikey_exporter) )
+                        secret= [len(pubkey_list)] + pubkey_list
+                        header= self.make_header('Authentikey from TrustStore', 'Export in plaintext allowed', card_label)
+                        secret_dic={'header':header, 'secret':secret}
+                        (sid_pubkey, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                        self.handler.show_notification('Information: ', f"Authentikey '{card_label}' successfully imported with id {sid_pubkey}" )
+                    else:
+                        self.handler.show_notification('Information: ', 'Secure import cancelled by user')
+                        return None
+                else: # nothing in trustsore 
+                    self.handler.show_error('Could not find a trusted pubkey matching '+ authentikey_exporter)
+                    return None
             
             nb_secrets=nb_errors=0
             msg=''
             for secret_dic in secret_json['secrets']:
                 try:
-                    sid, fingerprint = self.cc.seedkeeper_import_secret(secret_dic, sid_pubkey)
+                    (itype, stype, label, fingerprint_header)= self.parse_secret_header(secret_dic)
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic, sid_pubkey)
                     nb_secrets+=1
-                    msg+= f'Securely imported secret with id {str(sid)} \n'
+                    msg+= f"Imported {stype} with label '{label}', fingerprint {fingerprint} & id {sid}\n" 
                 except (SeedKeeperError, UnexpectedSW12Error) as ex:
                     nb_errors+=1
                     logger.error(f"Error during secure secret import: {ex}")
@@ -527,13 +547,69 @@ class Client:
                 return None
         
         else: # Satochip
+            # check if satochip is seeded:
+            if self.cc.is_seeded:
+                self.handler.show_error(f'Import aborted: Satochip is already Seeded!')
+                return None
+            
             # check if authentikey_exporter is trusted
             authentikey_exporter=secret_json['authentikey_exporter']
             pubkey_hex= self.cc.card_export_trusted_pubkey()
-            if (pubkey_hex!= authentikey_exporter):
-                self.handler.show_error(f'Authentikey_exporter {authentikey_exporter} does not match Satochip trusted_pubkey {pubkey_hex}!')
+            if (pubkey_hex== authentikey_exporter): #ok, nothing to be done
+                pass
+            elif (pubkey_hex==65*'00'): # no trusted_key defined inside the Satochip
+                #look in the truststore
+                card_label= self.truststore.get(authentikey_exporter, None)
+                if card_label is not None:
+                    yes_no= self.handler.yes_no_question(f'An authentikey matching {authentikey_exporter} has been found in the TrustStore with the label: {card_label}. \nContinue import with this authentikey?')
+                    if yes_no:
+                        authentikey_list= list(bytes.fromhex(authentikey_exporter))
+                        pubkey_hex=  self.cc.card_import_trusted_pubkey(authentikey_list)
+                        self.handler.show_notification('Information: ', f"Authentikey '{pubkey_hex}' successfully imported to Satochip!")
+                    else:
+                        self.handler.show_notification('Information: ', 'Secure import cancelled by user')
+                        return None
+                else: # nothing found in trustsore 
+                    self.handler.show_error('Import aborted: could not find a trusted pubkey matching '+ authentikey_exporter)
+                    return None
+            elif (pubkey_hex==65*'FF'): # unsupported
+                self.handler.show_error(f'Import aborted: this version of Satochip does not support secure import from a SeedKeeper!')
                 return None
-            secret_dic= secret_json['secrets'][0]
+            else: 
+                self.handler.show_error(f'Import aborted: the authentikey_exporter {authentikey_exporter} does not match the Satochip trusted_pubkey {pubkey_hex}!')
+                return None
+            
+            # select MasterSeed from list (if any)
+            index_list=[]
+            masterseed_list=[]
+            for index, secret_dic in enumerate(secret_json['secrets']):
+                (itype, stype, label, fingerprint)= self.parse_secret_header(secret_dic)
+                #header_list= list(bytes.fromhex(secret_dic['header']))[2:]
+                #itype= header_list[0]
+                if (itype!=0x10):
+                    continue
+                #label_size= header_list[12]
+                # if ( len(header_list)>=(12+label_size) ):
+                    # label= header_list[13:(13+label_size)]
+                    # label= bytes(label).decode('utf8')
+                # else:
+                    # label=''
+                # fingerprint= bytes(header_list[6:(6+4)]).hex()
+                index_list.append(index)
+                masterseed_list.append('MasterSeed: ' + fingerprint + ': ' + label)
+            if ( len(index_list)==0 ):
+                self.handler.show_error(f'Import aborted: no MasterSeed found in json!')
+                return None
+            else:
+                event2, values2 = self.handler.choose_masterseed_from_list(masterseed_list)
+                if event2=='Submit':
+                    index= index_list[ masterseed_list.index(values2['masterseed_list'][0]) ] #values2['masterseed_list'] is a list
+                else:
+                    self.handler.show_notification('Information: ', 'Secure import cancelled by user')
+                    return None
+                
+            # do the import
+            secret_dic= secret_json['secrets'][index] 
             try:
                 authentikey = self.cc.card_bip32_import_encrypted_seed(secret_dic)
                 authentikey_hex= authentikey.get_public_key_bytes(compressed=False).hex()
@@ -543,120 +619,9 @@ class Client:
                 self.handler.show_error(str(ex))
                 return None
         
-    # #todo: refactor
-    # def seed_wizard(self): 
-        # logger.debug("In seed_wizard()") #debugSatochip
-            
-        # from mnemonic import Mnemonic
-        # # state: state_choose_seed_action - state_create_seed -  state_request_passphrase - (state_confirm_seed)  - (state_confirm_passphrase) - state_abort
-        # # state: state_choose_seed_action - state_restore_from_seed - state_request_passphrase - state_abort
-        # state= 'state_choose_seed_action'    
-        
-        # while (True):
-            # if (state=='state_choose_seed_action'):
-                # mnemonic= None
-                # passphrase= None
-                # seed= None
-                # needs_confirm= None
-                # use_passphrase= None
-                # (event, values)= self.handler.choose_seed_action()
-                # label= values['label']
-                # export_rights= values['export_rights']
-                # if (event =='Next') and (values['create'] is True):
-                    # state='state_create_seed'
-                # elif (event =='Next') and (values['restore'] is True):
-                    # state= 'state_restore_from_seed'
-                # else: # cancel
-                    # state= 'state_abort'
-                    # break
-                    
-            # elif (state=='state_create_seed'):
-                # needs_confirm= False
-                # MNEMONIC = Mnemonic(language="english")
-                # mnemonic = MNEMONIC.generate(strength=128)
-                # if MNEMONIC.check(mnemonic):    
-                    # (event, values)= self.request('create_seed', mnemonic)
-                    # if (event=='Next') and (values['use_passphrase'] is True):
-                        # use_passphrase= True
-                        # state= 'state_request_passphrase'
-                    # elif (event=='Next') and not values['use_passphrase']:
-                        # use_passphrase= False
-                        # if (needs_confirm):
-                            # state= 'state_confirm_seed'
-                        # else:
-                            # break
-                    # else: #Back
-                        # state= 'state_choose_seed_action'
-                # else:  #should not happen
-                    # #raise ValueError("Invalid BIP39 seed!")
-                    # logger.warning("Invalid BIP39 seed!")
-                    # self.request('show_error', "Invalid BIP39 seed!")
-                    # state= 'state_choose_seed_action'
-                
-            # elif (state=='state_request_passphrase'):                        
-                # (event, values)= self.request('request_passphrase')
-                # if (event=='Next'):
-                    # passphrase= values['passphrase']
-                    # if (needs_confirm):
-                        # state= 'state_confirm_seed'
-                    # else:
-                       # break #finished
-                # else: #Back
-                    # state= 'state_choose_seed_action'
-                
-            # elif (state=='state_confirm_seed'):               
-                # (event, values)= self.request('confirm_seed')
-                # mnemonic_confirm= values['seed_confirm']
-                # if (event=='Next') and (mnemonic== mnemonic_confirm):
-                    # if (use_passphrase):
-                        # state= 'state_confirm_passphrase'
-                    # else:
-                        # break #finish!
-                # elif (event=='Next') and (mnemonic!= mnemonic_confirm):
-                    # self.request('show_error','Seed mismatch!')
-                    # state= 'state_choose_seed_action'
-                # else:
-                    # state= 'state_choose_seed_action'
-                    
-            # elif (state=='state_confirm_passphrase'):            
-                # (event, values)= self.request('confirm_passphrase')
-                # passphrase_confirm= values['passphrase_confirm']
-                # if (event=='Next') and (passphrase== passphrase_confirm):
-                    # break #finish!
-                # elif (event=='Next') and (passphrase!= passphrase_confirm):
-                    # self.request('show_error','Passphrase mismatch!')
-                    # state= 'state_choose_seed_action'
-                # else:
-                    # state= 'state_choose_seed_action'
-            
-            # elif (state== 'state_restore_from_seed'):
-                # needs_confirm= False
-                # (event, values)= self.request('restore_from_seed')
-                # mnemonic= values['seed']
-                # use_passphrase= values['use_passphrase']
-                # if (event=='Next') and use_passphrase:
-                    # state= 'state_request_passphrase'
-                # elif (event=='Next') and not use_passphrase:
-                    # break #finished!
-                # else: #Back
-                    # state= 'state_choose_seed_action'
-            
-            # else:
-                # logger.warning('State error!')
-        
-        # # if mnemonic is None:
-            # # self.request('show_message', "Seed initialization aborted! \nYour Satochip may be unusable until a seed is created... \n Go to 'menu' -> 'Setup new Satochip' to complete setup")
-        # passphrase='' if passphrase is None else passphrase
-        # seed= Mnemonic.to_seed(mnemonic, passphrase) if mnemonic else None
-        # #print('mnemonic: '+ str(mnemonic))
-        # #print('passphrase: '+str(passphrase))
-        # #print('seed: '+str(seed.hex()))
-        
-        # return (mnemonic, passphrase, seed, label, export_rights)
-    
     def  get_secret_header_list(self):
         # get a list of all the secrets & pubkeys available
-        dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
+        #dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
         label_list=[]
         id_list=[]
         label_pubkey_list=['None (export to plaintext)']
@@ -665,7 +630,7 @@ class Client:
         try:
             headers= self.cc.seedkeeper_list_secret_headers()
             for header_dic in headers:
-                label_list.append( dic_type.get(header_dic['type'], hex(header_dic['type'])) + ': ' + header_dic['fingerprint'] + ': '  + header_dic['label'] )
+                label_list.append( Client.dic_type.get(header_dic['type'], hex(header_dic['type'])) + ': ' + header_dic['fingerprint'] + ': '  + header_dic['label'] )
                 id_list.append( header_dic['id'] )
                 if header_dic['type']==0x70:
                     pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
@@ -680,12 +645,31 @@ class Client:
         
         # add authentikeys from Truststore
         for authentikey, card_label in self.truststore.items():
+            if authentikey== self.cc.parser.authentikey.get_public_key_bytes(False).hex():
+                continue #skip own authentikey
             authentikey_bytes= bytes.fromhex(authentikey)
             secret= bytes([len(authentikey_bytes)]) + authentikey_bytes
             fingerprint= hashlib.sha256(secret).hexdigest()[0:8]
             if fingerprint not in fingerprint_pubkey_list:
-                keyvalue = 'In Truststore: ' + fingerprint + ': ' + card_label + 'authentikey' +": "+ authentikey[0:8] + "..."
+                keyvalue = 'In Truststore: ' + fingerprint + ': ' + card_label + ' authentikey' +": "+ authentikey[0:8] + "..."
                 label_pubkey_list.append(keyvalue)
                 id_pubkey_list.append(authentikey)
          
         return label_list, id_list, label_pubkey_list, id_pubkey_list
+    
+    def parse_secret_header(self, secret_dic):
+        header_list= list(bytes.fromhex(secret_dic['header']))[2:] #first 2 bytes is sid
+        itype= header_list[0]
+        stype= Client.dic_type.get(itype, hex(itype))
+        label_size= header_list[12]
+        try:
+            #if ( len(header_list)>=(12+label_size) ):
+            label= header_list[13:(13+label_size)]
+            label= bytes(label).decode('utf8')
+        except Exception as ex:
+            label= 'label error'
+        fingerprint= bytes(header_list[6:(6+4)]).hex()
+
+        return itype, stype, label, fingerprint
+    
+    
