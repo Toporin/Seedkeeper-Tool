@@ -27,7 +27,7 @@ class Client:
         self.queue_reply= Queue()
         self.cc= cc
         self.truststore={}
-        self.new_card_present= False
+        self.card_event= False
         self.card_label= ''
     
     # def request_threading(self, request_type, *args):
@@ -169,12 +169,10 @@ class Client:
                     self.request('show_error', msg)
                 
                 if (self.cc.needs_secure_channel):
-                    self.cc.card_initiate_secure_channel()
-                break 
+                    self.cc.card_initiate_secure_channel() 
                 
-            # setup device (done only once)
+            # START setup device (done only once)
             else:
-                
                 #setup dialog
                 (event, values)= self.handler.setup_card()
                 if (event != 'Submit'):
@@ -183,18 +181,6 @@ class Client:
                     return False
                 pin_0= list(values['pin'].encode('utf8'))
                 label = values['card_label']
-                
-                # # PIN dialog
-                # msg = ("Enter a new PIN for your Satochip:")
-                # msg_confirm = ("Please confirm the PIN code for your Satochip:")
-                # msg_error = ("The PIN values do not match! Please type PIN again!")
-                # (is_PIN, pin_0)= self.PIN_setup_dialog(msg, msg_confirm, msg_error)
-                # if not is_PIN:
-                    # #raise RuntimeError('A PIN code is required to initialize the Satochip!')
-                    # logger.warning('Initialization aborted: a PIN code is required to initialize the Satochip!')
-                    # self.request('show_error', 'A PIN code is required to initialize the Satochip.\nInitialization aborted!')
-                    # return False
-                #pin_0= list(pin_0)
                 
                 pin_tries_0= 0x05;
                 ublk_tries_0= 0x01;
@@ -222,57 +208,54 @@ class Client:
                     return False
                     #raise RuntimeError('Unable to setup the device with error code:'+hex(sw1)+' '+hex(sw2))
                 
-                #card label 
-                # msg= "Enter a label for this card (optional):"
-                # (is_data, data)= self.handler.get_data(msg)
-                # if (is_data):
-                    # try:
-                        # (response, sw1, sw2)= self.cc.card_set_label(data)
-                    # except Exception as ex:
-                        # logger.warning(f"Error while setting card label: {str(ex)}")
+                # set card label
                 try:
                     (response, sw1, sw2)= self.cc.card_set_label(label)
                 except Exception as ex:
                     logger.warning(f"Error while setting card label: {str(ex)}")
-                
-        # verify pin:
-        try: 
-            self.cc.card_verify_PIN()
-        except RuntimeError as ex:
-            logger.warning(repr(ex))
-            self.request('show_error', repr(ex))
-            return False
+            # END setup device
+            
+            # verify pin:
+            try: 
+                self.cc.card_verify_PIN()
+            except RuntimeError as ex:
+                logger.warning(repr(ex))
+                self.request('show_error', repr(ex))
+                return False
+            
+            # get authentikey
+            try:
+                self.authentikey=self.cc.card_export_authentikey()
+            except Exception as ex:
+                logger.warning(repr(ex))
+                self.request('show_error', repr(ex))
+                return False
+            
+            #card label 
+            try:
+                (response, sw1, sw2, card_label)= self.cc.card_get_label()
+                self.card_label= card_label
+            except Exception as ex:
+                logger.warning(f"Error while getting card label: {str(ex)}")
+            
+            # add authentikey to TrustStore
+            authentikey_hex= self.authentikey.get_public_key_bytes(compressed=False).hex()
+            if authentikey_hex in self.truststore:
+                pass #self.handler.show_success('Authentikey already in TrustStore!')
+            else:
+                authentikey_bytes= bytes.fromhex(authentikey_hex)
+                secret= bytes([len(authentikey_bytes)]) + authentikey_bytes
+                fingerprint= hashlib.sha256(secret).hexdigest()[0:8]
+                authentikey_comp= self.authentikey.get_public_key_bytes(compressed=True).hex()
+                self.truststore[authentikey_hex]= {'card_label':card_label, 'fingerprint':fingerprint, 'authentikey_comp':authentikey_comp}#self.card_label
+                #self.show_success('Authentikey added to TrustStore!')
+                self.handler.show_notification('Information: ', f'Authentikey added to TrustStore! \n{authentikey_comp}')
+            
+            # return true if wizard finishes correctly 
+            return True
         
-        # get authentikey
-        try:
-            self.authentikey=self.cc.card_export_authentikey()
-        except Exception as ex:
-            logger.warning(repr(ex))
-            self.request('show_error', repr(ex))
-            return False
-        
-        #card label 
-        try:
-            (response, sw1, sw2, card_label)= self.cc.card_get_label()
-            self.card_label= card_label
-        except Exception as ex:
-            logger.warning(f"Error while getting card label: {str(ex)}")
-        
-        # add authentikey to TrustStore
-        authentikey_hex= self.authentikey.get_public_key_bytes(compressed=False).hex()
-        if authentikey_hex in self.truststore:
-            pass #self.handler.show_success('Authentikey already in TrustStore!')
-        else:
-            authentikey_bytes= bytes.fromhex(authentikey_hex)
-            secret= bytes([len(authentikey_bytes)]) + authentikey_bytes
-            fingerprint= hashlib.sha256(secret).hexdigest()[0:8]
-            authentikey_comp= self.authentikey.get_public_key_bytes(compressed=True).hex()
-            self.truststore[authentikey_hex]= {'card_label':card_label, 'fingerprint':fingerprint, 'authentikey_comp':authentikey_comp}#self.card_label
-            #self.show_success('Authentikey added to TrustStore!')
-            self.handler.show_notification('Information: ', f'Authentikey added to TrustStore! \n{authentikey_comp}')
-        
-        # return true if wizard finishes correctly 
-        return True
+        # no card present 
+        return False
         
 ############################
 #    SEED WIZARD
@@ -380,7 +363,7 @@ class Client:
             elif stype== 'Secure import from json':
                 self.import_secure_secret()
                 
-            elif stype== 'Public Key':
+            elif stype== 'Trusted Pubkey': #'Public Key':
                 event, values= self.handler.import_secret_pubkey()
                 if event == 'Submit':
                     pubkey= values['pubkey']

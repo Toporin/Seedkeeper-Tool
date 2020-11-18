@@ -5,7 +5,6 @@ import sys
 #import traceback
 from os import urandom
 
-
 from pysatochip.CardConnector import CardConnector, UninitializedSeedError
 from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
@@ -36,29 +35,29 @@ time.sleep(1) # give some time to initialize reader...
 
 while(True):
         
-    #client.card_init_connect()
-    if (client.new_card_present):
-        client.new_card_present= not client.card_init_connect()
-    time.sleep(0.1) # give some time to initialize reader...
+    # #client.card_init_connect()
+    # if (client.card_event):
+        # client.card_event= not client.card_init_connect()
+    # time.sleep(0.1) # give some time to initialize reader...
     
     event= handler.main_menu()
     logger.debug("Event: "+ str(event))
     
-    if event == 'Generate a new seed':
+    if event == 'Generate_new_seed':
         client.generate_seed()    
-    elif  event == 'Import a Secret':
+    elif  event == 'import_secret': 
         client.import_secret()
-    elif event == 'Export a Secret':
+    elif event ==  'export_secret': 
         handler.export_secret()
-    elif event == 'Make a backup':
+    elif event == 'make_backup':
         handler.make_backup()
-    elif event == 'List Secrets':
+    elif event == 'list_secrets':
         handler.list_headers()
-    elif event == 'Get logs':
+    elif event == 'get_logs':
         handler.logs_menu()
-    elif event == 'About':
+    elif event == 'about':
         handler.about_menu()
-    elif event == 'Quit':
+    elif event == 'quit':
         break;
     else: 
         logger.debug("Unknown event: "+ str(event))

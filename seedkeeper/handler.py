@@ -37,7 +37,7 @@ class HandlerTxt:
     def update_status(self, isConnected):
         if (isConnected):
             print("Card connected!")
-            self.client.new_card_present=True
+            self.client.card_event=True
         else:
             print("Card disconnected!")
 
@@ -94,17 +94,14 @@ class HandlerSimpleGUI:
         #return resource_path(icon_basename)
         return os.path.join(self.pkg_dir, icon_basename)
     
+    # CAUTION: update_status is called from another thread and in principle, no gui is allowed outside of the main thread
     def update_status(self, isConnected):
         logger.debug('In update_status')
-        if (isConnected):
-            self.client.new_card_present=True
-            #self.client.card_init_connect() # NOK: cannot create pySimpleGui object from thread 
+        self.client.card_event=True #trigger update of GUI 
+        #if (isConnected):
             #self.tray.update(filename=self.satochip_icon) #self.tray.update(filename=r'satochip.png')
-        else:
+        #else:
             #self.tray.update(filename=self.satochip_unpaired_icon) #self.tray.update(filename=r'satochip_unpaired.png')
-            pass
-        logger.debug('End update_status')
-        
          
     def show_error(self, msg):
         sg.popup('Error!', msg, icon=self.satochip_unpaired_icon)
@@ -125,8 +122,7 @@ class HandlerSimpleGUI:
         #sg.SystemTray.notify(title, msg) # AttributeError: type object 'SystemTray' has no attribute 'notify'
         #sg.SystemTray.show_message(title=title, message=msg)
         #logger.debug("END show_notification")
-        pass
-    
+        
     def approve_action(self, question):
         logger.debug('In approve_action')
         layout = [[sg.Text(question)],    
@@ -226,37 +222,60 @@ class HandlerSimpleGUI:
     def main_menu(self):
         logger.debug('In main_menu')
         
-        button_color_enabled= (None, None) # ('White', 'DarkBlue')
+        button_color_enabled= ('#912CEE', '#B2DFEE') # purple2, lighblue2 - see https://github.com/PySimpleGUI/PySimpleGUI/blob/master/DemoPrograms/Demo_Color_Chooser_Custom.py
         button_color_disabled= ('White', 'Gray')
+        disabled=[False]*6
+        color= [button_color_enabled]*6
+        buttons=['Generate_new_seed', 'import_secret', 'export_secret', 'make_backup', 'list_secrets', 'get_logs']
         
-        disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=disabled7=disabled8=False
-        color1=color2=color3=color4=color5=color6=color7=color8=button_color_enabled
-        if self.client.cc.card_type=='SeedKeeper':
-            pass
-        elif self.client.cc.card_type=='Satochip':
-            disabled1=disabled3=disabled4=disabled5=disabled6=True
-            color1=color3=color4=color5=color6=button_color_disabled
-        else:
-            disabled1=disabled2=disabled3=disabled4=disabled5=disabled6=True
-            color1=color2=color3=color4=color5=color6=button_color_disabled
+        def update_button(do_update_layout=False):
+            nonlocal disabled, color
+            logger.debug("Update_button - Card reader status: "+ str(self.client.cc.card_type))
+            
+            if self.client.cc.card_type=='SeedKeeper':
+                disabled=[False]*6
+                color= [button_color_enabled]*6
+            elif self.client.cc.card_type=='Satochip':
+                disabled=[True]*6
+                disabled[1]=False
+                color= [button_color_disabled]*6
+                color[1]= button_color_enabled
+            else: #no card
+                disabled=[True]*6
+                color= [button_color_disabled]*6
+            if (do_update_layout):
+                print("Update layout!")
+                for index, button in enumerate(buttons):
+                    window[button].update(disabled=disabled[index])
+                    window[button].update(button_color=color[index]) 
         
         layout = [[sg.Text('Welcome to SeedKeeper Utility !')],  
                         #[sg.Text('Card inserted:' + str(self.client.cc.card_type))],          
-                        [sg.Button('Generate a new seed', disabled= disabled1, button_color=color1) ],
-                        [sg.Button('Import a Secret', disabled= disabled2, button_color=color2)],
-                        [sg.Button('Export a Secret', disabled= disabled3, button_color=color3)],
-                        [sg.Button('Make a backup', disabled= disabled4, button_color=color4)],
-                        [sg.Button('List Secrets', disabled= disabled5, button_color=color5)],
-                        [sg.Button('Get logs', disabled= disabled6, button_color=color6)],
-                        [sg.Button('About', disabled= disabled7, button_color=color7)],
-                        [sg.Button('Quit', disabled= disabled8, button_color=color8)],
+                        [sg.Button('Generate a new MasterSeed', disabled= disabled[0], button_color=color[0], key=buttons[0]) ],
+                        [sg.Button('Import a Secret', disabled= disabled[1], button_color=color[1], key=buttons[1])],
+                        [sg.Button('Export a Secret', disabled= disabled[2], button_color=color[2], key=buttons[2])],
+                        [sg.Button('Make a backup', disabled= disabled[3], button_color=color[3], key=buttons[3])],
+                        [sg.Button('List Secrets', disabled= disabled[4], button_color=color[4], key=buttons[4])],
+                        [sg.Button('Get logs', disabled= disabled[5], button_color=color[5], key=buttons[5])],
+                        [sg.Button('About', disabled= False, button_color=button_color_enabled, key='about')],
+                        [sg.Button('Quit', disabled= False, button_color=button_color_enabled, key='quit')],
                     ]      
-        window = sg.Window('SeedKeeper utility', layout, icon=self.satochip_icon)  #ok
-        event, values = window.read()    
+        window = sg.Window('SeedKeeper utility', layout, icon=self.satochip_icon).Finalize()   #ok
+        update_button(True)
+        
+        while True:
+            event, values = window.read(timeout=200)    
+            if (self.client.card_event):
+                update_button(True)
+                #self.client.card_event= not self.client.card_init_connect()
+                self.client.card_init_connect()
+                self.client.card_event= False
+                continue
+            if event != sg.TIMEOUT_KEY:
+                break
+                
         window.close()  
         del window
-        
-        logger.debug("Type of event from getpass:"+str(type(event))+str(event))
         return event
         
     def generate_new_seed(self):
@@ -281,9 +300,13 @@ class HandlerSimpleGUI:
     def import_secret_menu(self):
         logger.debug('In import_secret_menu')
         
-        #import_list= ['BIP39 seed', 'Electrum seed', 'MasterSeed', 'Secure import from json', 'Public Key', 'Authentikey from TrustStore', 'Password']
-        import_list= ['Mnemonic phrase', 'MasterSeed', 'Secure import from json', 'Authentikey from TrustStore', 'Public Key', 'Password']
-        
+        if self.client.cc.card_type=='SeedKeeper':
+            import_list=['Mnemonic phrase', 'MasterSeed', 'Secure import from json', 'Authentikey from TrustStore', 'Trusted Pubkey', 'Password']
+        elif self.client.cc.card_type=='Satochip':
+            import_list=['Mnemonic phrase', 'MasterSeed', 'Secure import from json', 'Authentikey from TrustStore', 'Trusted Pubkey']
+        else:
+            import_list=['(no card inserted)']
+            
         layout = [
             [sg.Text('Choose the type of secret you wish to import: ', size=(30, 1))],
             #[sg.Text('Type: ', size=(10, 1)), sg.InputCombo( import_list, key='type', size=(20, 1))],
@@ -822,61 +845,64 @@ class HandlerSimpleGUI:
         authentikey= None
         authentikey_comp= "N/A"
         card_label= "N/A"
-        msg_status= ("Card is not initialized! \nClick on 'Setup new Satochip' in the menu to start configuration.")
-            
-        (response, sw1, sw2, status)=self.client.cc.card_get_status()
-        if (sw1==0x90 and sw2==0x00):
-            #hw version
-            v_applet= (status["protocol_major_version"]<<8)+status["protocol_minor_version"] 
-            fw_rel= str(status["protocol_major_version"]) +'.'+ str(status["protocol_minor_version"])  +' - '+ str(status["applet_major_version"]) +'.'+ str(status["applet_minor_version"])
-            # status
-            if (self.client.cc.card_type=='Satochip' and v_supported_satochip<v_applet):
-                msg_status=(f'The version of your Satochip is higher than supported. \nYou should update SeedKeeperUtil!')
-            elif (self.client.cc.card_type=='SeedKeeper' and v_supported_seedkeeper<v_applet):
-                msg_status=(f'The version of your SeedKeeper is higher than supported. \nYou should update SeedKeeperUtil!')
-            else:
-                msg_status= 'SeedKeeperUtil is up-to-date'
-            # needs2FA?
-            if len(response)>=9 and response[8]==0X01: 
-                needs_2FA= "yes"
-            elif len(response)>=9 and response[8]==0X00: 
-                needs_2FA= "no"
-            else:
-                needs_2FA= "unknown"
-            #is_seeded?
-            if len(response) >=10:
-                is_seeded="yes" if status["is_seeded"] else "no" 
-            else: #for earlier versions
-                try: 
-                    self.client.cc.card_bip32_get_authentikey()
-                    is_seeded="yes"
+        #msg_status= ("Card is not initialized! \nClick on 'Setup new Satochip' in the menu to start configuration.")
+         
+        if (self.client.cc.card_present):
+            (response, sw1, sw2, status)=self.client.cc.card_get_status()
+            if (sw1==0x90 and sw2==0x00):
+                #hw version
+                v_applet= (status["protocol_major_version"]<<8)+status["protocol_minor_version"] 
+                fw_rel= str(status["protocol_major_version"]) +'.'+ str(status["protocol_minor_version"])  +' - '+ str(status["applet_major_version"]) +'.'+ str(status["applet_minor_version"])
+                # status
+                if (self.client.cc.card_type=='Satochip' and v_supported_satochip<v_applet):
+                    msg_status=(f'The version of your Satochip is higher than supported. \nYou should update SeedKeeperUtil!')
+                elif (self.client.cc.card_type=='SeedKeeper' and v_supported_seedkeeper<v_applet):
+                    msg_status=(f'The version of your SeedKeeper is higher than supported. \nYou should update SeedKeeperUtil!')
+                else:
+                    msg_status= 'SeedKeeperUtil is up-to-date'
+                # needs2FA?
+                if len(response)>=9 and response[8]==0X01: 
+                    needs_2FA= "yes"
+                elif len(response)>=9 and response[8]==0X00: 
+                    needs_2FA= "no"
+                else:
+                    needs_2FA= "unknown"
+                #is_seeded?
+                if len(response) >=10:
+                    is_seeded="yes" if status["is_seeded"] else "no" 
+                else: #for earlier versions
+                    try: 
+                        self.client.cc.card_bip32_get_authentikey()
+                        is_seeded="yes"
+                    except UninitializedSeedError:
+                        is_seeded="no"
+                    except Exception:
+                        is_seeded="unknown"    
+                # secure channel
+                if status["needs_secure_channel"]:
+                    needs_SC= "yes"
+                else:
+                    needs_SC= "no"
+                # authentikey
+                try:
+                    authentikey_pubkey= self.client.cc.card_export_authentikey() # self.client.authentikey #
+                    authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
+                    authentikey= authentikey_bytes.hex()
+                    authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=True).hex()
                 except UninitializedSeedError:
-                    is_seeded="no"
-                except Exception:
-                    is_seeded="unknown"    
-            # secure channel
-            if status["needs_secure_channel"]:
-                needs_SC= "yes"
-            else:
-                needs_SC= "no"
-            # authentikey
-            try:
-                authentikey_pubkey= self.client.cc.card_export_authentikey() # self.client.authentikey #
-                authentikey_bytes= authentikey_pubkey.get_public_key_bytes(compressed=False)
-                authentikey= authentikey_bytes.hex()
-                authentikey_comp= authentikey_pubkey.get_public_key_bytes(compressed=True).hex()
-            except UninitializedSeedError:
-                authentikey= None
-                authentikey_comp= "This SeedKeeper is not initialized!"
-            except UnexpectedSW12Error as ex:
-                authentikey= None
-                authentikey_comp= str(ex)
-                #self.show_error(str(ex))
-            #card label 
-            try:
-                (response, sw1, sw2, card_label)= self.client.cc.card_get_label()
-            except Exception as ex:
-                card_label= str(ex)
+                    authentikey= None
+                    authentikey_comp= "This SeedKeeper is not initialized!"
+                except UnexpectedSW12Error as ex:
+                    authentikey= None
+                    authentikey_comp= str(ex)
+                    #self.show_error(str(ex))
+                #card label 
+                try:
+                    (response, sw1, sw2, card_label)= self.client.cc.card_get_label()
+                except Exception as ex:
+                    card_label= str(ex)
+            else: 
+                msg_status= f'Unexpected error while polling card: error code {hex(sw1)} {hex(sw2)}'
         else:
             msg_status= 'No card found! please insert card!'
             
