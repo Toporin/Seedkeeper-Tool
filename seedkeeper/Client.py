@@ -370,51 +370,6 @@ class Client:
                     self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' imported to Satochip!")
                     return 1
                
-            # elif stype== 'Trusted Pubkey' : #'Public Key':
-                # event, values= self.handler.import_secret_pubkey()
-                # if event == 'Submit':
-                    # pubkey= values['pubkey']
-                    # pubkey_list= list( bytes.fromhex(pubkey) )
-                    # secret= [len(pubkey_list)] + pubkey_list
-                    # #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
-                    # label= values['label']
-                    # export_rights= values['export_rights']
-                    # header= self.make_header(stype, export_rights, label)
-                    # secret_dic={'header':header, 'secret':secret}
-                    # (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                    # self.handler.show_success(f"Secret successfully imported with id {sid}")
-                    # return sid
-                # else:
-                    # #self.handler.show_message(f"Operation cancelled")
-                    # self.handler.show_notification('Information: ', 'Operation cancelled by user')
-                    # return None
-                    
-            # elif stype== 'Authentikey from TrustStore':
-                # if len(self.truststore)==0:
-                    # self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
-                    # return None
-                
-                # event, values= self.handler.import_secret_authentikey()
-                # if event != 'Submit':
-                    # self.handler.show_notification('Information: ', 'Operation cancelled by user')
-                    # return None
-                    
-                # authentikey= values['authentikey']
-                # authentikey_list= list( bytes.fromhex(authentikey) )
-                # if (self.cc.card_type=='SeedKeeper'):
-                    # secret= [len(authentikey_list)] + authentikey_list
-                    # label= values['label']
-                    # export_rights= values['export_rights']
-                    # header= self.make_header(stype, export_rights, label)
-                    # secret_dic={'header':header, 'secret':secret}
-                    # (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                    # self.handler.show_success(f"Secret successfully imported with id {sid}")
-                    # return sid
-                # else: #Satochip
-                    # pubkey_hex=  self.cc.card_import_trusted_pubkey(authentikey_list)
-                    # self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' successfully imported to Satochip!")
-                    # return 0
-            
             elif stype== 'Password':
                 event, values= self.handler.import_secret_password()
                 if event == 'Submit':
@@ -578,17 +533,8 @@ class Client:
             masterseed_list=[]
             for index, secret_dic in enumerate(secret_json['secrets']):
                 (itype, stype, label, fingerprint)= self.parse_secret_header(secret_dic)
-                #header_list= list(bytes.fromhex(secret_dic['header']))[2:]
-                #itype= header_list[0]
                 if (itype!=0x10):
                     continue
-                #label_size= header_list[12]
-                # if ( len(header_list)>=(12+label_size) ):
-                    # label= header_list[13:(13+label_size)]
-                    # label= bytes(label).decode('utf8')
-                # else:
-                    # label=''
-                # fingerprint= bytes(header_list[6:(6+4)]).hex()
                 index_list.append(index)
                 masterseed_list.append('MasterSeed: ' + fingerprint + ': ' + label)
             if ( len(index_list)==0 ):
@@ -641,19 +587,6 @@ class Client:
         label_authentikey_list, authentikey_list= self.get_truststore_list(fingerprint_pubkey_list)
         label_pubkey_list.extend(label_authentikey_list)
         id_pubkey_list.extend(authentikey_list)
-        # for authentikey, dic_info in self.truststore.items():
-            # if authentikey== self.cc.parser.authentikey.get_public_key_bytes(False).hex():
-                # continue #skip own authentikey
-            # card_label= dic_info['card_label']
-            # fingerprint= dic_info['fingerprint']
-            # authentikey_comp= dic_info['authentikey_comp']
-            # # authentikey_bytes= bytes.fromhex(authentikey)
-            # # secret= bytes([len(authentikey_bytes)]) + authentikey_bytes
-            # # fingerprint= hashlib.sha256(secret).hexdigest()[0:8]
-            # if fingerprint not in fingerprint_pubkey_list:
-                # keyvalue = 'In Truststore: ' + fingerprint + ': ' + card_label + ' authentikey' +": "+ authentikey_comp[0:8] + "..."
-                # label_pubkey_list.append(keyvalue)
-                # id_pubkey_list.append(authentikey)
          
         return label_list, id_list, label_pubkey_list, id_pubkey_list
     
@@ -667,9 +600,6 @@ class Client:
             card_label= dic_info['card_label']
             fingerprint= dic_info['fingerprint']
             authentikey_comp= dic_info['authentikey_comp']
-            # authentikey_bytes= bytes.fromhex(authentikey)
-            # secret= bytes([len(authentikey_bytes)]) + authentikey_bytes
-            # fingerprint= hashlib.sha256(secret).hexdigest()[0:8]
             if fingerprint not in fingerprint_list:
                 keyvalue = 'In Truststore: ' + fingerprint + ': ' + card_label + ' authentikey' +": "+ authentikey_comp[0:8] + "..."
                 label_authentikey_list.append(keyvalue)
