@@ -573,7 +573,7 @@ class Client:
                 label_list.append( Client.dic_type.get(header_dic['type'], hex(header_dic['type'])) + ': ' + header_dic['fingerprint'] + ': '  + header_dic['label'] )
                 id_list.append( header_dic['id'] )
                 if header_dic['type']==0x70:
-                    pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
+                    pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain #todo: compressed form?
                     pubkey= pubkey_dic['secret_hex'][2:10]
                     label_pubkey_list.append('In SeedKeeper: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
                     id_pubkey_list.append( header_dic['id'] )
@@ -600,7 +600,7 @@ class Client:
             card_label= dic_info['card_label']
             fingerprint= dic_info['fingerprint']
             authentikey_comp= dic_info['authentikey_comp']
-            if fingerprint not in fingerprint_list:
+            if fingerprint not in fingerprint_list: #skip authentikey already in device
                 keyvalue = 'In Truststore: ' + fingerprint + ': ' + card_label + ' authentikey' +": "+ authentikey_comp[0:8] + "..."
                 label_authentikey_list.append(keyvalue)
                 authentikey_list.append(authentikey)

@@ -268,7 +268,6 @@ class HandlerSimpleGUI:
             event, values = window.read(timeout=200)    
             if (self.client.card_event):
                 update_button(True)
-                #self.client.card_event= not self.client.card_init_connect()
                 self.client.card_init_connect()
                 self.client.card_event= False
                 continue
@@ -492,14 +491,14 @@ class HandlerSimpleGUI:
             [sg.Text('Type: ', size=(10, 1)), sg.Text(key='type')],
             [sg.Text('Origin: ', size=(10, 1)), sg.Text(key='origin')],
             [sg.Multiline(key='secret', size=(60, 4) )],
-            [sg.Button('Export', bind_return_key=True), sg.Cancel()]
+            [sg.Button('Export', bind_return_key=True), sg.Button('Close') ] # sg.Cancel()
         ]   
         
         window = sg.Window('SeedKeeper export', layout)      
         while True:      
             event, values = window.read()      
             logger.debug(f"event: {event}")
-            if event == 'Export':  #if event != 'Exit'  and event != 'Cancel':      
+            if event == 'Export':  #if event != 'Exit'  and event != 'Close':      
                 try:     
                     label= values['label_list']
                     sid= id_list[ label_list.index(label) ]
@@ -519,7 +518,8 @@ class HandlerSimpleGUI:
                     secret_dic={'header':header, 'secret':secret}
                     (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
                     self.show_notification('Information: ', f"Authentikey '{label}' imported from TrustStore with id {sid_pubkey}")
-                    #todo: update (label_list, id_list, label_pubkey_list, id_pubkey_list)
+                    # update sid_pubkey in id_pubkey_list to reflect change (so that authentikey is only imported once from truststore to device...)
+                    id_pubkey_list[ label_pubkey_list.index(label_pubkey) ]= sid_pubkey
                     
                 try: 
                     secret_dict= self.client.cc.seedkeeper_export_secret(sid, sid_pubkey)
@@ -582,9 +582,7 @@ class HandlerSimpleGUI:
                     # secure export print json of Secret?
                     else: 
                         window['type'].update('Encrypted Secret') 
-                        #window['fingerprint'].update('N/A (encrypted)')      
                         try:
-                            #secret_dict_pubkey= self.client.cc.seedkeeper_export_plain_secret(sid_pubkey)
                             secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
                             authentikey_importer= secret_dict_pubkey['secret_hex'][2:]
                         except Exception as ex:
@@ -639,7 +637,7 @@ class HandlerSimpleGUI:
             [sg.Multiline(key='secret', size=(60, 8) )],
             [sg.Text('Number of secrets exported: ', size=(20, 1)), sg.Text(key='nb_secrets'), 
                 sg.Text('Number of errors: ', size=(20, 1), visible=False), sg.Text(key='nb_errors', visible=True)],
-            [sg.Button('Backup', bind_return_key=True), sg.Cancel()]
+            [sg.Button('Backup', bind_return_key=True), sg.Button('Close') ] # sg.Cancel()
         ]   
         
         window = sg.Window('SeedKeeper backup', layout)     
@@ -647,7 +645,7 @@ class HandlerSimpleGUI:
         while True:      
             event, values = window.read()      
             logger.debug(f"event: {event}")
-            if event == 'Backup':  #if event != 'Exit'  and event != 'Cancel':      
+            if event == 'Backup':  #if event != 'Exit'  and event != 'Close':      
                 
                 #get trusted authentikey from device or truststore
                 label_pubkey= values['label_pubkey_list']
@@ -669,6 +667,8 @@ class HandlerSimpleGUI:
                         secret_dic={'header':header, 'secret':secret}
                         (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
                         self.show_notification('Information: ', f"Authentikey '{label} imported from TrustStore with id {sid_pubkey}")
+                        # update sid_pubkey in id_pubkey_list to reflect change (so that authentikey is only imported once from truststore to device...)
+                        id_pubkey_list[ label_pubkey_list.index(label_pubkey) ]= sid_pubkey
                     except Exception as ex:
                         logger.warning('Exception during pubkey export: '+str(ex))
                         authentikey_importer= "(unknown)"
