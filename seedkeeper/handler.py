@@ -258,6 +258,7 @@ class HandlerSimpleGUI:
                         [sg.Button('List Secrets', disabled= disabled[4], button_color=color[4], key=buttons[4])],
                         [sg.Button('Get logs', disabled= disabled[5], button_color=color[5], key=buttons[5])],
                         [sg.Button('About', disabled= False, button_color=button_color_enabled, key='about')],
+                        [sg.Button('Help', disabled= False, button_color=button_color_enabled, key='help')],
                         [sg.Button('Quit', disabled= False, button_color=button_color_enabled, key='quit')],
                     ]      
         window = sg.Window('SeedKeeper utility', layout, icon=self.satochip_icon).Finalize()   #ok
@@ -785,7 +786,7 @@ class HandlerSimpleGUI:
         # nice presentation instead of raw data
         txt= f'Number of secrets stored: {len(headers)}'
         headings=['Id', 'Label', 'Type', 'Origin', 'Export rights', 'Nb plain exports', 'Nb encrypted exports', 'Nb secret exported', 'Fingerprint']
-        dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
+        dic_type= {0x30:'BIP39 mnemonic', 0x40:'Electrum mnemonic', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
         dic_origin= {0x01:'Plaintext import', 0x02:'Encrypted import', 0x03:'Generated on card'}
         dic_export_rights={0x01:'Plaintext export allowed', 0x02:'Encrypted export only', 0x03:'Export forbidden'}
         
@@ -947,6 +948,33 @@ class HandlerSimpleGUI:
             if event=='Ok' or event=='Cancel':
                 break
         
+        window.close()  
+        del window
+    
+    def help_menu(self):
+        logger.debug('In help_menu')
+        path = os.path.join(self.pkg_dir, 'help/English.txt')
+        with open(path, 'r', encoding='utf-8') as f:
+            help_txt = f.read().strip()
+        
+        logger.debug('In help_menu: '+ help_txt)
+        languages=['English', 'Français']
+        layout = [
+            [sg.Text('Select language: ', size=(15, 1)), sg.InputCombo(languages, key='lang', size=(25, 1), enable_events=True)],
+            [sg.Multiline(help_txt, key='help_txt', size=(60,10), visible=True)],
+            [sg.Button('Ok')]
+        ]
+        window = sg.Window("Help manual", layout, icon=self.satochip_icon).finalize()
+        while True:
+            event, values = window.read()  
+            if event=='Ok' or event=='Cancel':
+                break
+            if event== 'lang':
+                path = os.path.join(self.pkg_dir, 'help/'+values['lang']+'.txt')
+                with open(path, 'r', encoding='utf-8') as f:
+                    help_txt = f.read().strip()
+                window['help_txt'].update(help_txt)
+            
         window.close()  
         del window
     

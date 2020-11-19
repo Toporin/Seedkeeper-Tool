@@ -57,6 +57,8 @@ while(True):
         handler.logs_menu()
     elif event == 'about':
         handler.about_menu()
+    elif event == 'help':
+        handler.help_menu()
     elif event == 'quit':
         break;
     else: 
