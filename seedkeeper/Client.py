@@ -29,39 +29,7 @@ class Client:
         self.truststore={}
         self.card_event= False
         self.card_label= ''
-    
-    # def request_threading(self, request_type, *args):
-        # logger.debug('Client request: '+ str(request_type))
-        
-        # # bypass queue-based data exchange between main GUI thread and   
-        # # server thread when request comes directly from the main thread.
-        # if threading.current_thread() is threading.main_thread():
-            # #TODO: check if handler exist
-            # logger.debug('In main thread:')
-            # method_to_call = getattr(self.handler, request_type)
-            # #logger.debug('Type of method_to_call: '+ str(type(method_to_call)))
-            # #logger.debug('Method_to_call: '+ str(method_to_call))
-            # reply = method_to_call(*args)
-            # return reply 
-        
-        # # we use a queue to exchange request between the server thread and the main (GUI) thread
-        # self.queue_request.put((request_type, args))
-        # logger.debug('In second thread:')
-        
-        # # Get some data 
-        # try:
-            # #todo: check if several message are sent...
-            # #(reply_type, reply)= self.queue_reply.get(block=True, timeout=5)  #TODO: check if blocking
-            # (reply_type, reply)= self.queue_reply.get(block=True, timeout=None)  #TODO: check if blocking
-            # if (reply_type != request_type):
-                # # should not happen #todo: clean the queues
-                # RuntimeError("Reply mismatch during GUI handler notification!")
-            # else:
-                # return reply
-        # except Exception as exc:
-            # self.request('show_error', "[Client] Exception in request(): "+repr(exc))
-            # return None
-            
+           
     def request(self, request_type, *args):
         logger.debug('Client request: '+ str(request_type))
         
@@ -286,63 +254,66 @@ class Client:
     def import_secret(self):
         
         event, values = self.handler.import_secret_menu()
-        
         if (event != 'Submit'):
             return None
             
         try: 
             stype= values['type'][0] # values['type']     
             if stype== 'Mnemonic phrase':
-                event, values= self.handler.mnemonic_wizard()
+                event, values= self.handler.mnemonic_wizard(self.cc.card_type)
                 if event != 'Submit':
-                    self.handler.show_message(f"Operation cancelled")
+                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
                     return None
-                mnemonic= values['mnemonic']
-                mnemonic_type= values['mnemonic_type']
-                passphrase= values['passphrase']
-                label= values['label']
-                export_rights= values['export_rights']
                 
-                mnemonic_list= list(mnemonic.encode("utf-8"))
-                passphrase_list= list(passphrase.encode('utf-8'))
-                stype= 'Electrum seed' if mnemonic_type.startswith('Electrum') else 'BIP39 seed' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
-                secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
-                header= self.make_header(stype, export_rights, label)
-                secret_dic={'header':header, 'secret':secret}
-                (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                #self.handler.show_success(f"Secret successfully imported with id {sid}")
-                
-                # also import corresponding masterseed
-                masterseed_list= list( values['masterseed'] )
-                secret= [len(masterseed_list)] + masterseed_list
-                label= 'MasterSeed from mnemonic ' + values['label']
-                header= self.make_header('MasterSeed', export_rights, label)
-                secret_dic={'header':header, 'secret':secret}
-                (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
-                authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                self.handler.show_success(f"Mnemonic successfully imported with id {sid} \nMasterseed successfully imported with id {sid2} \nCorresponding authentikey: {authentikey_hex}")
-                return sid
-                
-            # elif stype== 'BIP39 seed':
-                # (mnemonic, passphrase, seed, label, export_rights)= self.seed_wizard() #todo: check None
-                # if mnemonic is None:
-                    # self.handler.show_message(f"Secret import aborted!")
-                    # return None
-                # mnemonic_list= list(mnemonic.encode("utf-8"))
-                # passphrase_list= list(passphrase.encode('utf-8'))
-                # secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
-                # #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
-                # header= self.make_header(stype, export_rights, label)
-                # secret_dic={'header':header, 'secret':secret}
-                # (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                # self.handler.show_success(f"Secret successfully imported with id {sid}")
-                # return sid
-                
-            # elif stype== 'Electrum seed':
-                # #TODO adapt wizard for electrum seeds?
-                # self.handler.show_error(f"Not implement yet!")
-                # return None
-                
+                if (self.cc.card_type=='SeedKeeper'):
+                    mnemonic= values['mnemonic']
+                    mnemonic_list= list(mnemonic.encode("utf-8"))
+                    mnemonic_type= values['mnemonic_type']
+                    passphrase= values['passphrase']
+                    passphrase_list= list(passphrase.encode('utf-8'))
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    
+                    stype= 'Electrum seed' if mnemonic_type.startswith('Electrum') else 'BIP39 seed' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
+                    secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                    #self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    
+                    # also import corresponding masterseed
+                    masterseed_list= list( values['masterseed'] )
+                    secret= [len(masterseed_list)] + masterseed_list
+                    label= 'MasterSeed from mnemonic ' + values['label']
+                    header= self.make_header('MasterSeed', export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
+                    authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
+                    self.handler.show_success(f"Mnemonic successfully imported with id {sid} & fingerprint {fingerprint} \nMasterseed successfully imported with id {sid2} & fingerprint {fingerprint2} \nCorresponding authentikey: {authentikey_hex}")
+                    return 2
+                else: #Satochip
+                    mnemonic_type= values['mnemonic_type']
+                    if mnemonic_type.startswith('Electrum'):
+                        message= '  '.join([
+                                    ("You are trying to import an Electrum seed to a Satochip hardware wallet."),
+                                    ("\nElectrum seeds are not compatible with the BIP39 seeds typically used in hardware wallets."), 
+                                    ("\nThis means you may have difficulty to import this seed in another wallet in the future."),
+                                    ("\n\nAre you sure you want to continue? If you are not sure, click on 'no'. "),
+                                ])
+                        yes_no= self.handler.yes_no_question(message)
+                        if not yes_no:
+                            self.handler.show_notification('Information: ', 'Operation cancelled by user')
+                            return 0
+                    masterseed_list= list( values['masterseed'] )
+                    authentikey= self.cc.card_bip32_import_seed(masterseed_list)
+                    if authentikey==None:
+                        raise Exception("Error during mnemonic import: maybe the Satochip is already seeded.")
+                    authentikey_hex= authentikey.get_public_key_bytes(True).hex()
+                    authentikey_hex2= self.cc.get_authentikey_from_masterseed(masterseed_list)
+                    assert authentikey_hex==authentikey_hex2, f"Authentikey mismatch {authentikey_hex} {authentikey_hex2}"
+                    self.handler.show_success(f"Mnemonic successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
+                    return 1
+                    
             elif stype== 'MasterSeed':
                 event, values= self.handler.import_secret_masterseed()
                 if event != 'Submit':
@@ -350,64 +321,99 @@ class Client:
                     return None
                 masterseed= values['masterseed']
                 masterseed_list= list( bytes.fromhex(masterseed) )
-                secret= [len(masterseed_list)] + masterseed_list
-                label= values['label']
-                export_rights= values['export_rights']
-                header= self.make_header(stype, export_rights, label)
-                secret_dic={'header':header, 'secret':secret}
-                (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                self.handler.show_success(f"Masterseed successfully imported with id {sid} \nCorresponding authentikey: {authentikey_hex}")
-                return sid
-                    
-            elif stype== 'Secure import from json':
-                self.import_secure_secret()
-                
-            elif stype== 'Trusted Pubkey': #'Public Key':
-                event, values= self.handler.import_secret_pubkey()
-                if event == 'Submit':
-                    pubkey= values['pubkey']
-                    pubkey_list= list( bytes.fromhex(pubkey) )
-                    secret= [len(pubkey_list)] + pubkey_list
-                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                if (self.cc.card_type=='SeedKeeper'):
+                    secret= [len(masterseed_list)] + masterseed_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                    self.handler.show_success(f"Secret successfully imported with id {sid}")
-                    return sid
-                else:
-                    #self.handler.show_message(f"Operation cancelled")
-                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
-                    return None
+                    authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
+                    self.handler.show_success(f"Masterseed successfully imported with id {sid} & fingerprint {fingerprint} \nCorresponding authentikey: {authentikey_hex}")
+                else: #Satochip
+                    authentikey= self.cc.card_bip32_import_seed(masterseed_list)
+                    authentikey_hex= authentikey.get_public_key_bytes(True).hex()
+                    authentikey_hex2= self.cc.get_authentikey_from_masterseed(masterseed_list)
+                    assert authentikey_hex==authentikey_hex2, f"Authentikey mismatch {authentikey_hex} {authentikey_hex2}"
+                    self.handler.show_success(f"Masterseed successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
+                return 1
                     
-            elif stype== 'Authentikey from TrustStore':
-                if len(self.truststore)==0:
-                    self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
+            elif stype== 'Secure import from json':
+                self.import_secure_secret()
+            
+            elif stype== 'Trusted Pubkey' or stype=='Authentikey from TrustStore': #'Public Key':
+                if stype=='Trusted Pubkey':
+                    event, values= self.handler.import_secret_pubkey()
+                else: # stype=='Authentikey from TrustStore'
+                    if len(self.truststore)==0:
+                        self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
+                        return None
+                    event, values= self.handler.import_secret_authentikey()
+                
+                if event != 'Submit':
+                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
                     return None
                 
-                event, values= self.handler.import_secret_authentikey()
-                if event == 'Submit':
-                    authentikey= values['authentikey']
-                    authentikey_list= list( bytes.fromhex(authentikey) )
-                    if (self.cc.card_type=='SeedKeeper'):
-                        secret= [len(authentikey_list)] + authentikey_list
-                        label= values['label']
-                        export_rights= values['export_rights']
-                        header= self.make_header(stype, export_rights, label)
-                        secret_dic={'header':header, 'secret':secret}
-                        (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                        self.handler.show_success(f"Secret successfully imported with id {sid}")
-                        return sid
-                    else: #Satochip
-                        pubkey_hex=  self.cc.card_import_trusted_pubkey(authentikey_list)
-                        self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' successfully imported to Satochip!")
-                        return 0
-                else:
-                    #self.handler.show_message(f"Operation cancelled")
-                    self.handler.show_notification('Information: ', 'Operation cancelled by user')
-                    return None
+                authentikey= values['pubkey']
+                authentikey_list= list( bytes.fromhex(authentikey) )
+                if (self.cc.card_type=='SeedKeeper'):
+                    secret= [len(authentikey_list)] + authentikey_list
+                    label= values['label']
+                    export_rights= values['export_rights']
+                    header= self.make_header(stype, export_rights, label)
+                    secret_dic={'header':header, 'secret':secret}
+                    (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                    self.handler.show_success(f"Authentikey {authentikey} imported with id {sid} & fingerprint {fingerprint}")
+                    return sid
+                else: #Satochip
+                    pubkey_hex=  self.cc.card_import_trusted_pubkey(authentikey_list)
+                    self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' imported to Satochip!")
+                    return 1
+               
+            # elif stype== 'Trusted Pubkey' : #'Public Key':
+                # event, values= self.handler.import_secret_pubkey()
+                # if event == 'Submit':
+                    # pubkey= values['pubkey']
+                    # pubkey_list= list( bytes.fromhex(pubkey) )
+                    # secret= [len(pubkey_list)] + pubkey_list
+                    # #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
+                    # label= values['label']
+                    # export_rights= values['export_rights']
+                    # header= self.make_header(stype, export_rights, label)
+                    # secret_dic={'header':header, 'secret':secret}
+                    # (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                    # self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    # return sid
+                # else:
+                    # #self.handler.show_message(f"Operation cancelled")
+                    # self.handler.show_notification('Information: ', 'Operation cancelled by user')
+                    # return None
+                    
+            # elif stype== 'Authentikey from TrustStore':
+                # if len(self.truststore)==0:
+                    # self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
+                    # return None
+                
+                # event, values= self.handler.import_secret_authentikey()
+                # if event != 'Submit':
+                    # self.handler.show_notification('Information: ', 'Operation cancelled by user')
+                    # return None
+                    
+                # authentikey= values['authentikey']
+                # authentikey_list= list( bytes.fromhex(authentikey) )
+                # if (self.cc.card_type=='SeedKeeper'):
+                    # secret= [len(authentikey_list)] + authentikey_list
+                    # label= values['label']
+                    # export_rights= values['export_rights']
+                    # header= self.make_header(stype, export_rights, label)
+                    # secret_dic={'header':header, 'secret':secret}
+                    # (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
+                    # self.handler.show_success(f"Secret successfully imported with id {sid}")
+                    # return sid
+                # else: #Satochip
+                    # pubkey_hex=  self.cc.card_import_trusted_pubkey(authentikey_list)
+                    # self.handler.show_success(f"Trusted pubkey '{pubkey_hex}' successfully imported to Satochip!")
+                    # return 0
             
             elif stype== 'Password':
                 event, values= self.handler.import_secret_password()
@@ -415,14 +421,13 @@ class Client:
                     password= values['password']
                     password_list= list( password.encode('utf-8') )
                     secret= [len(password_list)] + password_list
-                    #(sid, fingerprint) = self.cc.seedkeeper_import_plain_secret(itype, export_rights, label, secret)
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                    self.handler.show_success(f"Secret successfully imported with id {sid}")
-                    return sid
+                    self.handler.show_success(f"Secret successfully imported with id {sid} & fingerprint {fingerprint}")
+                    return 1
                 else:
                     #self.handler.show_message(f"Operation cancelled by user") 
                     self.handler.show_notification('Information: ', 'Operation cancelled by user')

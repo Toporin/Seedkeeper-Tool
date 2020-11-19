@@ -432,18 +432,14 @@ class HandlerSimpleGUI:
         logger.debug("import_secret_authentikey")
         
         list_authentikey_label, list_authentikey= self.client.get_truststore_list()
-        # list_from_dic=[]
-        # list_authentikey=[]
-        # #list_card_label=[]
-        # for authentikey, card_label in self.client.truststore.items():
-            # keyvalue = card_label +" - "+ authentikey[0:8] + "..." + authentikey[-8:]
-            # list_from_dic.append(keyvalue)
-            # list_authentikey.append(authentikey)
-            # #list_card_label.append(card_label)
+        if len(list_authentikey_label)==0:
+            self.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
+            event='Cancel'
+            return event, None
         
         layout = [
             [sg.Text('Choose the authentikey you wish to import from TrustStore: ', size=(60, 1))],
-            [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(list_authentikey_label, key='authentikey', size=(40, 1))],
+            [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(list_authentikey_label, key='pubkey', size=(40, 1))],
             [sg.Text('Label: ', size=(10, 1)), sg.InputText(key='label', size=(40, 1))],
             #[sg.Text('Export rights: ', size=(10, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(20, 1))],
             [sg.Submit(), sg.Cancel()]
@@ -456,8 +452,8 @@ class HandlerSimpleGUI:
         if len(values['label']) >127: # check label 
             values['label']= values['label'][0:127]
         values['export_rights']= 'Export in plaintext allowed' # a public key should be exportable in plaintext for audit purpose...
-        values['authentikey']= list_authentikey[list_authentikey_label.index(values['authentikey'])] 
-        #values['card_label']= list_card_label[list_authentikey.index(values['authentikey'])] 
+        values['pubkey']= list_authentikey[list_authentikey_label.index(values['pubkey'])] 
+        #values['card_label']= list_card_label[list_authentikey.index(values['pubkey'])] 
         return event, values
     
     def import_secret_password(self):    
@@ -954,36 +950,56 @@ class HandlerSimpleGUI:
         window.close()  
         del window
     
-    def mnemonic_wizard(self):
+    def mnemonic_wizard(self, card_type):
+        # For satochip cards, the user should not be able to generate a new seed, only to import an existing one otherwise no backup is available
         logger.debug('In mnemonic_wizard')
         
         MNEMONIC = Mnemonic(language="english")
         use_passphrase=False
-        
-        layout = [
-            [sg.Text('Label: ', size=(12, 1)), sg.InputText(key='label', size=(40, 1))],
-            [sg.Text('Mnemonic type: ', size=(12, 1)), sg.InputCombo(('BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'), key='mnemonic_type', size=(25, 1), enable_events=True)],
-            [sg.Text('Mnemonic size: ', size=(12, 1)), sg.InputCombo(('12 words' , '18 words', '24 words'), key='mnemonic_size', size=(25, 1), enable_events=True)],
-            [sg.Text('Export rights: ', size=(12, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(25, 1))],
-            [sg.Text("")],
+        if card_type== 'SeedKeeper':
+            layout = [
+                [sg.Text('Label: ', size=(12, 1)), sg.InputText(key='label', size=(40, 1))],
+                [sg.Text('Mnemonic type: ', size=(12, 1)), sg.InputCombo(('BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'), key='mnemonic_type', size=(25, 1), enable_events=True)],
+                [sg.Text('Mnemonic size: ', size=(12, 1)), sg.InputCombo(('12 words' , '18 words', '24 words'), key='mnemonic_size', size=(25, 1), enable_events=True)],
+                [sg.Text('Export rights: ', size=(12, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(25, 1))],
+                [sg.Text("")],
+                
+                [sg.Text("Do you want to create a new mnemonic, or to restore a wallet using an existing mnemonic?")],
+                [sg.Radio('Create a new mnemonic', 'radio1', key='radio_create', default=False, enable_events=True)], 
+                [sg.Radio('I already have a mnemonic', 'radio1', key='radio_restore', default=False, enable_events=True)], 
+                [sg.Text('', size=(12, 1), key='mnemonic_prompt', visible=False), sg.Multiline(key='mnemonic', size=(40,3), visible=False, enable_events=True)], 
+                [sg.Checkbox('Extends this mnemonic with custom words', key='use_passphrase', default=False, enable_events=True)], 
+                [sg.Text('', size=(12, 1), key='passphrase_prompt', visible=use_passphrase), sg.InputText(key='passphrase', visible=use_passphrase)], 
+                
+                [sg.Button('Submit'), sg.Button('Cancel') ],
+                [sg.Text("", key='on_error', text_color='red' )],
+            ]
+        else: # card_type== 'Satochip':
+            layout = [        
+                [sg.Text('Enter mnemonic: ', size=(12, 1), key='mnemonic_prompt', visible=False), sg.Multiline(key='mnemonic', size=(40,3), visible=True, enable_events=True)], 
+                [sg.Checkbox('Extends this mnemonic with custom words', key='use_passphrase', default=False, enable_events=True)], 
+                [sg.Text('', size=(12, 1), key='passphrase_prompt', visible=use_passphrase), sg.InputText(key='passphrase', visible=use_passphrase)], 
+                
+                [sg.Button('Submit'), sg.Button('Cancel') ],
+                [sg.Text("", key='on_error', text_color='red' )],
+            ]
             
-            [sg.Text("Do you want to create a new mnemonic, or to restore a wallet using an existing mnemonic?")],
-            [sg.Radio('Create a new mnemonic', 'radio1', key='radio_create', default=False, enable_events=True)], 
-            [sg.Radio('I already have a mnemonic', 'radio1', key='radio_restore', default=False, enable_events=True)], 
-           
-            [sg.Text('', size=(12, 1), key='mnemonic_prompt', visible=False), sg.Multiline(key='mnemonic', size=(40,3), visible=False, enable_events=True)], 
-            
-            [sg.Checkbox('Extends this mnemonic with custom words', key='use_passphrase', default=False, enable_events=True)], 
-            [sg.Text('', size=(12, 1), key='passphrase_prompt', visible=use_passphrase), sg.InputText(key='passphrase', visible=use_passphrase)], 
-            
-            [sg.Button('Submit'), sg.Button('Cancel') ],
-            
-            [sg.Text("", key='on_error', text_color='red' )],
-        ]
         window = sg.Window("Create or restore mnemonic", layout, icon=self.satochip_icon) 
         
         def check_mnemonic(mnemonic_type, mnemonic):
-            logger.debug("Mnemonic:"+str(type(mnemonic))+" " +str(mnemonic))
+            nonlocal values
+            #logger.debug("Mnemonic: "+str(mnemonic))
+            # determine type if needed (e.g. for satochip layout)
+            if mnemonic_type=='unknown':
+                mnemonic_type= electrum_mnemonic.seed_type(mnemonic)
+                if mnemonic_type=='standard':
+                    mnemonic_type= 'Electrum mnemonic (non-segwit)'
+                elif mnemonic_type=='segwit':
+                    mnemonic_type= 'Electrum mnemonic (segwit)'
+                else:
+                    mnemonic_type= 'BIP39 mnemonic'
+                values['mnemonic_type']=mnemonic_type
+            
             if (mnemonic_type == 'BIP39 mnemonic'):
                 if( not MNEMONIC.check(mnemonic) ):
                     window['on_error'].update(text_color='red' )
@@ -991,7 +1007,7 @@ class HandlerSimpleGUI:
                     return False
                 else:
                     window['on_error'].update(text_color='green' )
-                    window['on_error'].update('Mnemonic ok!')
+                    window['on_error'].update('BIP39 mnemonic ok!')
             elif (mnemonic_type == 'Electrum mnemonic (segwit)'):
                 if( electrum_mnemonic.seed_type(mnemonic) != 'segwit'):
                     window['on_error'].update(text_color='red' )
@@ -999,7 +1015,7 @@ class HandlerSimpleGUI:
                     return False
                 else:
                     window['on_error'].update(text_color='green' )
-                    window['on_error'].update('Mnemonic ok!')
+                    window['on_error'].update('Electrum (segwit) mnemonic ok!')
             elif (mnemonic_type == 'Electrum mnemonic (non-segwit)'):
                 if( electrum_mnemonic.seed_type(mnemonic) != 'standard'):
                     window['on_error'].update(text_color='red' )
@@ -1007,7 +1023,7 @@ class HandlerSimpleGUI:
                     return False
                 else:
                     window['on_error'].update(text_color='green' )
-                    window['on_error'].update('Mnemonic ok!')
+                    window['on_error'].update('Electrum (non-segwit) mnemonic ok!')
             return True
             
         while True:
@@ -1023,8 +1039,6 @@ class HandlerSimpleGUI:
                 window['radio_create'].update(False) 
                 window['radio_restore'].update(False) 
                 #window['radio_restore'].reset_group() #nok
-                #values['radio_create']= False
-                #values['radio_restore']= False
                 
             if event=='radio_create':
                 # strength required
@@ -1060,18 +1074,18 @@ class HandlerSimpleGUI:
                     window['passphrase'].update('')
             
             elif event== 'mnemonic':
-                mnemonic_type=  values['mnemonic_type']
                 mnemonic= values['mnemonic']
+                mnemonic_type=  values.get('mnemonic_type', 'unknown')
                 check_mnemonic(mnemonic_type, mnemonic)
                 
             elif event=='Submit':
                 # check label
-                if len(values['label']) >127:
+                if card_type=='SeedKeeper' and len(values['label']) >127:
                     window['on_error'].update(text_color='red' )
                     window['on_error'].update('Label length should be strictly lower than 128!')
                     continue
                 # check mnemonic    
-                mnemonic_type=  values['mnemonic_type']
+                mnemonic_type=  values.get('mnemonic_type', 'unknown') # values['mnemonic_type']
                 mnemonic= values['mnemonic']
                 if use_passphrase:
                     passphrase= values['passphrase']
@@ -1090,8 +1104,6 @@ class HandlerSimpleGUI:
         window.close()
         del window
         
-        logger.debug("Event:"+str(type(event))+str(event))
-        logger.debug("Values:"+str(type(values))+str(values))
         return (event, values)
         
         
