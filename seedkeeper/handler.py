@@ -1,15 +1,13 @@
 #import PySimpleGUI as sg   
 #import PySimpleGUIWx as sg 
 import PySimpleGUIQt as sg 
-import base64    
+import base64  #todo:remove  
 import json
 import getpass
-import pyperclip
-from pyperclip import PyperclipException
 import sys
 import os
 import logging
-from queue import Queue 
+#from queue import Queue #todo: remove
 from mnemonic import Mnemonic
 
 from pysatochip.Satochip2FA import Satochip2FA
@@ -18,14 +16,15 @@ from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperError, Un
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
 from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
 
-#from . import electrum_mnemonic
-#import electrum_mnemonic
-# try: 
-    # import .electrum_mnemonic
-# except Exception as e:
-    # print('ImportError: '+repr(e))
-    # import seedkeeper.electrum_mnemonic
-from seedkeeper import electrum_mnemonic
+# print("DEBUG START handler.py ")
+# print("DEBUG START handler.py __name__: "+__name__)
+# print("DEBUG START handler.py __package__: "+str(__package__))
+
+try: 
+    import electrum_mnemonic
+except Exception as e:
+    print('handler.py importError: '+repr(e))
+    from . import electrum_mnemonic
     
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -186,7 +185,7 @@ class HandlerSimpleGUI:
                         [sg.Text('Enter new PIN: ', size=(16,1)), sg.InputText(password_char='*', key='pin')],      
                         [sg.Text('Confirm PIN: ', size=(16,1)), sg.InputText(password_char='*', key='pin2')],      
                         [sg.Text('Enter card label (optional): ', size=(16,1)), sg.InputText(key='card_label')],      
-                        [sg.Text(size=(40,1), key='-OUTPUT-')],
+                        [sg.Text(size=(40,1), key='-OUTPUT-', text_color='red')],
                         [sg.Submit(), sg.Cancel()]]     
                         
         window = sg.Window('Setup new card', layout, icon=self.satochip_icon)    
@@ -244,7 +243,7 @@ class HandlerSimpleGUI:
                 disabled=[True]*6
                 color= [button_color_disabled]*6
             if (do_update_layout):
-                print("Update layout!")
+                logger.debug("Update layout!")
                 for index, button in enumerate(buttons):
                     window[button].update(disabled=disabled[index])
                     window[button].update(button_color=color[index]) 
@@ -957,7 +956,6 @@ class HandlerSimpleGUI:
         with open(path, 'r', encoding='utf-8') as f:
             help_txt = f.read().strip()
         
-        logger.debug('In help_menu: '+ help_txt)
         languages=['English', 'Français']
         layout = [
             [sg.Text('Select language: ', size=(15, 1)), sg.InputCombo(languages, key='lang', size=(25, 1), enable_events=True)],
@@ -1134,4 +1132,4 @@ class HandlerSimpleGUI:
         
         return (event, values)
         
-        
+        # print("DEBUG END handler.py ")

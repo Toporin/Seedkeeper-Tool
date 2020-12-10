@@ -1,0 +1,23 @@
+SeedKeeper primer
+===============
+
+What is SeedKeeper?
+---------------------------------
+
+
+A few definitions
+--------------------------
+
+* Mnemonic:
+* Masterseed:
+* Authentikey:
+
+How to use your SeedKeeper?
+----------------------------------------------
+
+
+How to use SeedKeeper with your Satochip?
+------------------------------------------------------------------
+
+
+

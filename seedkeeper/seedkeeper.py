@@ -10,14 +10,20 @@ from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
 
-try: 
-    from Client import Client
-    from handler import HandlerTxt, HandlerSimpleGUI
-except Exception as e:
-    print('ImportError: '+repr(e))
-    from seedkeeper.Client import Client
-    from seedkeeper.handler import HandlerTxt, HandlerSimpleGUI
+# print("DEBUG START seedkeeper.py ")
+# print("DEBUG START seedkeeper.py __name__: "+__name__)
+# print("DEBUG START seedkeeper.py __package__: "+str(__package__))
 
+try: 
+    from client import Client
+    from handler import HandlerSimpleGUI
+except Exception as e:
+    print('seedkeeper importError: '+repr(e))
+    from seedkeeper.client import Client
+    from seedkeeper.handler import HandlerSimpleGUI
+                
+# to run from source, in parent folder: python3 -m  seedkeeper.py -v 
+# alternatively, also in parent folder: python3  seedkeeper/seedkeeper.py -v 
 
 if (len(sys.argv)>=2) and (sys.argv[1]in ['-v', '--verbose']):
     logging.basicConfig(level=logging.DEBUG, format='%(levelname)s [%(module)s] %(funcName)s | %(message)s')
@@ -35,11 +41,6 @@ time.sleep(1) # give some time to initialize reader...
 
 while(True):
         
-    # #client.card_init_connect()
-    # if (client.card_event):
-        # client.card_event= not client.card_init_connect()
-    # time.sleep(0.1) # give some time to initialize reader...
-    
     event= handler.main_menu()
     logger.debug("Event: "+ str(event))
     
@@ -65,3 +66,4 @@ while(True):
         logger.debug("Unknown event: "+ str(event))
         break;
 
+# print("DEBUG END seedkeeper.py ")

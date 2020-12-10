@@ -1,15 +1,19 @@
-import threading
 import logging
 import json
 import hashlib
 from os import urandom
-from queue import Queue 
+# from queue import Queue #todo: remove
+# import threading #todo:remove
 
 from pysatochip.CardConnector import CardConnector, UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error
 from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
 from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
+
+# print("DEBUG START client.py ")
+# print("DEBUG START client.py __name__: "+__name__)
+# print("DEBUG START client.py __package__: "+str(__package__))
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -23,8 +27,8 @@ class Client:
         logger.debug("In __init__")
         self.handler = handler
         self.handler.client= self
-        self.queue_request= Queue()
-        self.queue_reply= Queue()
+        # self.queue_request= Queue()
+        # self.queue_reply= Queue()
         self.cc= cc
         self.truststore={}
         self.card_event= False
@@ -622,4 +626,4 @@ class Client:
 
         return itype, stype, label, fingerprint
     
-    
+    # print("DEBUG END client.py ")

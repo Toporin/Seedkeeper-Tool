@@ -1,0 +1,16 @@
+#PyQRCode==1.2.1  #todo: remove
+#pypng==0.0.20   #todo: remove
+#pyperclip==1.7.0 #todo: remove
+mnemonic==0.19
+ecdsa==0.15
+pyscard==1.9.9
+#pysatochip==0.12.1 # todo: add if not local
+
+# GUI
+PySimpleGUIQt==0.31.0
+PySide2==5.12.6 #5.14.2
+#PySimpleGUI==4.18.0 
+#PySimpleGUIWx==0.15.0
+# wxPython==4.0.7.post2
+#PyQt5<5.12
+#PyQt5-sip<=4.19.13

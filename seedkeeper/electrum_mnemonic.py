@@ -38,6 +38,10 @@ from types import MappingProxyType
 #from . import version
 #from .logging import Logger
 
+# print("DEBUG START electrum_mnemonic.py ")
+# print("DEBUG START electrum_mnemonic.py __name__: "+__name__)
+# print("DEBUG START electrum_mnemonic.py __package__: "+str(__package__))
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -314,6 +318,4 @@ def is_seed(x: str) -> bool:
 def is_any_2fa_seed_type(seed_type: str) -> bool:
     return seed_type in ['2fa', '2fa_segwit']
 
-
-
-    
+# print("DEBUG END electrum_mnemonic.py ")
