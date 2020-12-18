@@ -5,7 +5,7 @@ from os import urandom
 # from queue import Queue #todo: remove
 # import threading #todo:remove
 
-from pysatochip.CardConnector import CardConnector, UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error
+from pysatochip.CardConnector import CardConnector, UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error, CardError, CardNotPresentError
 from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
@@ -114,6 +114,51 @@ class Client:
                 self.request('show_error', msg_error)
             else:
                 return (True, oldpin, newpin)
+    
+    def card_verify_authenticity(self):
+        logger.debug('In card_verify_authenticity')
+        # try:
+            # pubkey= self.cc.card_export_perso_pubkey()
+            # logger.debug('Device pubkey: '+ bytes(pubkey).hex())
+        # except CardException as ex:
+            # msg= ''.join(["Unable to verify card: feature unsupported! \n", 
+                                # "Authenticity validation is only available starting with Satochip v0.13 and higher"])
+            # self.handler.show_error(msg)
+            # break
+        # except UnexpectedSW12Error as ex:
+            # self.handler.show_error(str(ex))
+            # break
+        
+        # get certificate from device
+        cert_pem=txt_error=""
+        try:
+            cert_pem=self.cc.card_export_perso_certificate()
+            #logger.debug('Cert PEM: '+ str(cert_pem))
+        except CardError as ex:
+            txt_error= ''.join(["Unable to get device certificate: feature unsupported! \n", 
+                                "Authenticity validation is only available starting with Satochip v0.13 and higher"])
+        except CardNotPresentError as ex:
+            txt_error= "No card found! Please insert card."
+        except UnexpectedSW12Error as ex:
+            txt_error= "Exception during device certificate export: " + str(ex)
+        
+        if cert_pem=="(empty)":
+            txt_error= "Device certificate is empty: the card has not been personalized!"
+        
+        if txt_error!="":
+            return False, "(empty)", "(empty)", "(empty)", txt_error
+        
+        # check the certificate chain from root CA to device
+        from pysatochip.certificate_validator import CertificateValidator
+        validator= CertificateValidator()
+        is_valid_chain, device_pubkey, txt_ca, txt_subca, txt_device, txt_error= validator.validate_certificate_chain(cert_pem, self.cc.card_type)
+        if not is_valid_chain:
+            return False, txt_ca, txt_subca, txt_device, txt_error
+        
+        # perform challenge-response with the card to ensure that the key is correctly loaded in the device
+        is_valid_chalresp, txt_error = self.cc.card_challenge_response_pki(device_pubkey)
+       
+        return is_valid_chalresp, txt_ca, txt_subca, txt_device, txt_error
     
     ########################################
     #             Setup functions                              #
@@ -229,9 +274,9 @@ class Client:
         # no card present 
         return False
         
-############################
-#    SEED WIZARD
-############################    
+    ############################
+    #    SEED WIZARD
+    ############################    
     def generate_seed(self):
         event, values = self.handler.generate_new_seed()
         

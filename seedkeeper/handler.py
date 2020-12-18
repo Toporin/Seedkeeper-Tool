@@ -12,7 +12,7 @@ from mnemonic import Mnemonic
 
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.CardConnector import CardConnector
-from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error
+from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error, CardError
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
 from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
 
@@ -907,7 +907,7 @@ class HandlerSimpleGUI:
                                     [sg.Text('Firmware version: ', size=(20, 1)), sg.Text(fw_rel)],
                                     [sg.Text('Uses Secure Channel: ', size=(20, 1)), sg.Text(needs_SC)],
                                     [sg.Text('Authentikey: ', size=(20, 1)), sg.Text(authentikey_comp)],
-                                    [sg.Button('Show TrustStore', key='show_truststore', size= (20,1) )]]
+                                    [sg.Button('Show TrustStore', key='show_truststore', size= (20,1) ),  sg.Button('Verify Card', key='verify_card', size= (20,1) )]]
         frame_layout2= [
                                     [sg.Text('Supported version (SeedKeeper): ', size=(20, 1)), sg.Text(sw_rel_seedkeeper)],
                                     [sg.Text('Supported version (Satochip): ', size=(20, 1)), sg.Text(sw_rel_satochip)],
@@ -943,8 +943,37 @@ class HandlerSimpleGUI:
                 window2 = sg.Window('SeedKeeperUtil TrustStore', layout2, icon=self.satochip_icon, finalize=True)  #ok
                 event2, values2 = window2.read()    
                 window2.close()  
-                del window2        
-            if event=='Ok' or event=='Cancel':
+                del window2
+            elif event== 'verify_card':
+                is_authentic, txt_ca, txt_subca, txt_device, txt_error = self.client.card_verify_authenticity()            
+                if is_authentic:
+                    txt_result= 'Device authenticated successfully!'
+                    txt_color= 'green'
+                else:
+                    txt_result= ''.join(['Error: could not authenticate the issuer of this card! \n', 
+                                                'Reason: ', txt_error , '\n\n',
+                                                'If you did not load the card yourself, be extremely careful! \n',
+                                                'Contact support(at)satochip.io to report a suspicious device.'])
+                    txt_color= 'red'
+                
+                text_cert_chain= 32*"="+" Root CA certificate: "+32*"="+"\n"
+                text_cert_chain+= txt_ca
+                text_cert_chain+= "\n"+32*"="+" Sub CA certificate: "+32*"="+"\n"
+                text_cert_chain+= txt_subca
+                text_cert_chain+= "\n"+32*"="+" Device certificate: "+32*"="+"\n"
+                text_cert_chain+= txt_device
+                
+                layout2 = [
+                          [sg.Text(txt_result, text_color= txt_color)],
+                          [sg.Multiline(text_cert_chain, key='text_cert_chain', size=(80,20), visible=True)],
+                          [sg.Button('Ok')],
+                        ]
+                window2 = sg.Window('SeedKeeperUtil certificate chain validation', layout2, icon=self.satochip_icon, finalize=True)  #ok
+                event2, values2 = window2.read()    
+                window2.close()  
+                del window2
+                
+            elif event=='Ok' or event=='Cancel':
                 break
         
         window.close()  
