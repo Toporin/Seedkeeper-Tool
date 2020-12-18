@@ -1,6 +1,6 @@
 #!/bin/bash
 
-NAME_ROOT= SatochipBridge #electrum
+NAME_ROOT=SeedKeeperTool 
 
 # These settings probably don't need any change
 export WINEPREFIX=/opt/wine64
@@ -28,6 +28,10 @@ info "Last commit: $VERSION"
 find -exec touch -d '2000-11-11T11:11:11+00:00' {} +
 popd
 
+info "installing pip."
+$PYTHON -m ensurepip
+$PYTHON -m pip install --upgrade pip
+
 # Install frozen dependencies
 #info "Pip installing dependencies"
 #$PYTHON -m pip install --no-warn-script-location -r "$CONTRIB"/deterministic-build/requirements.txt
@@ -35,8 +39,9 @@ popd
 
 pushd $WINEPREFIX/drive_c/electrum
 # see https://github.com/pypa/pip/issues/2195 -- pip makes a copy of the entire directory
-info "Pip installing SatochipBrige. This might take a long time if the project folder is large."
+info "Pip installing SeedKeeperTool. This might take a long time if the project folder is large."
 $PYTHON -m pip install --no-warn-script-location .
+$PYTHON -m pip install --no-warn-script-location /pypackage # to install pysatochip package from local folder
 popd
 
 rm -rf dist/
@@ -46,8 +51,9 @@ info "Running pyinstaller..."
 # ls
 # ls ../..
 #wine "$PYHOME/scripts/pyinstaller.exe" --noconfirm --ascii --clean --name $NAME_ROOT-$VERSION -w deterministic.spec
-wine "$PYHOME/scripts/pyinstaller.exe" -cF --clean --name SatochipBridge-console-v.exe --additional-hooks-dir=. --add-data "../../satochip_bridge/*.png;."  "../../satochip_bridge/SatochipBridge.py" -i "../../satochip_bridge/satochip.ico" 
-wine "$PYHOME/scripts/pyinstaller.exe" -wF --clean --name SatochipBridge-v.exe --additional-hooks-dir=. --add-data "../../satochip_bridge/*.png;."  "../../satochip_bridge/SatochipBridge.py" -i "../../satochip_bridge/satochip.ico" 
+info "Running pyinstaller 2..."
+wine "$PYHOME/scripts/pyinstaller.exe" -cF --clean --name SeedKeeperTool-console-v.exe --additional-hooks-dir=. --add-data "../../seedkeeper/*.png;." --add-data "../../seedkeeper/wordlist/*.txt;wordlist/" --add-data "../../seedkeeper/help/*.txt;help/" "../../seedkeeper/seedkeeper.py" -i "../../seedkeeper/satochip.ico" 
+wine "$PYHOME/scripts/pyinstaller.exe" -wF --clean --name SeedKeeperTool-v.exe --additional-hooks-dir=. --add-data "../../seedkeeper/*.png;." --add-data  "../../seedkeeper/wordlist/*.txt;wordlist/" --add-data "../../seedkeeper/help/*.txt;help/"  "../../seedkeeper/seedkeeper.py" -i "../../seedkeeper/satochip.ico" 
 
 # set timestamps in dist, in order to make the installer reproducible
 pushd dist
@@ -97,4 +103,4 @@ EOF
     done
 )
 
-sha256sum dist/Satochip*.exe
+sha256sum dist/SeedKeeperTool*.exe

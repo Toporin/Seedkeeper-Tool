@@ -97,7 +97,7 @@ info "installing pip."
 info "installing SeedKeeper and its dependencies."
 mkdir -p "$CACHEDIR/pip_cache"
 "$python" -m pip install --no-warn-script-location --cache-dir "$CACHEDIR/pip_cache" -r "$CONTRIB/requirements/requirements.txt"
-"$python" -m pip install --no-warn-script-location --cache-dir "$CACHEDIR/pip_cache"  /pypackage #debug 
+"$python" -m pip install --no-warn-script-location --cache-dir "$CACHEDIR/pip_cache"  /pypackage # to include local pysatochip package
 #"$python" -m pip install --no-warn-script-location --cache-dir "$CACHEDIR/pip_cache" -r "$CONTRIB/requirements/requirements-hw.txt"
 #"$python" -m pip install --no-warn-script-location --cache-dir "$CACHEDIR/pip_cache" -r "$CONTRIB/deterministic-build/requirements.txt"
 #"$python" -m pip install --no-warn-script-location --cache-dir "$CACHEDIR/pip_cache" -r "$CONTRIB/deterministic-build/requirements-binaries.txt"
