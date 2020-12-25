@@ -630,6 +630,11 @@ class HandlerSimpleGUI:
         label_pubkey_list=label_pubkey_list[1:] # remove (none) value and id
         id_pubkey_list=id_pubkey_list[1:]
         
+        # skip if if no authentikey is available for export
+        if len(label_pubkey_list)==0:
+            self.show_error("No authentikey available for encrypted export. \nInsert a backup SeedKeeper for pairing or import a Trusted Pubkey first!")
+            return
+        
         layout = [
             #[sg.Text('Secrets to export: ', size=(10, 1)), sg.InputCombo(type_list, key='type_list', size=(40, 1)) ], 
             [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(label_pubkey_list, key='label_pubkey_list', size=(40, 1)) ],
