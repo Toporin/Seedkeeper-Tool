@@ -24,11 +24,12 @@ In order to clarify concepts, here are a few terms that will be use throughout t
 
 * PIN code: a 4-16 characters password used to unlock a SeedKeeper or Satochip. Any sensitive command requires to unlock the PIN device first. After the wrong PIN is input several times (typically 5), the device bricks itself and cannot be used anymore! 
 * Seed: is the generic term to designate the secret data that is used to setup a wallet and access funds. A seed can take the form of a Mnemonic list or raw bytes (Masterseed).
-* Mnemonic: is a (secret) list of 12 to 24 words that allows to generate or recover a wallet and spend the funds.
+* Mnemonic: is a human-readable list of 12 to 24 words that allows to generate or recover a wallet and spend the funds.
 * Masterseed: is a 16 to 32 bytes secret derived from the masterseed. It is this value that is ultimately used as input to the BIP32 derivation process.
-* SeedKeeperTool: this application used to communicate with a SeedKeeper
 * Authentikey: is a public/private elliptic curve keypair that is unique per SeedKeeper device (and Satochip) and that can be used to authenticate a device and initiate communication with it.
+* 2FA secret: is 20-byte random secret that can be used in a Satochip as second-factor authentication. If 2FA is enabled, all transactions must be approved on a second device such as a smartphone.
 * Truststore: in the SeedKeeperTool application, the truststore keeps a list of public key authentikeys for each SeedKeeper device connected so far. The Trustore is cleared upon application closing.
+* SeedKeeperTool: this application used to communicate with a SeedKeeper
 
 SeedKeeper overview
 ----------------------------------------
@@ -65,7 +66,7 @@ To use your SeedKeeper, simply connect a card reader and insert the SeedKeeper i
 On the first usage, you will need to initialize the card by defining a PIN code and optionnaly a label to identify the card. On the subsequent use, you will have to enter your PIN code in order to use your SeedKeeper, so be sure to memorize this PIN correctly!
 
 The SeedKeeperTool provides the following menu:
-* Generate a new MasterSeed: a new Masterseed is generated randomly on the card. This masterseed can then be used to to initialize a new wallet.
+* Generate a new Secret on-card: a new Secret (Masterseed or 2FA secret) is generated randomly on the card. The Masterseed can then be used to to initialize a new wallet or enable 2FA.
 
 * Import a secret: here are the type of sensitive data that can be imported from the submenu: 
 ** a Mnemonic phrase (12-24 words)
@@ -84,7 +85,7 @@ You can also choose the type of export: in plaintext (if allowed) or encrypted b
 * List Secrets: list, for each secret stored in the SeedKeeper, the following info:
 ** Id: the id of the secret, a unique number
 ** Label: the label associated with the secret
-** Type: can be MasterSeed, BIP39 Mnemonic, Electrum Mnemonic, Public Key (Authentikey), Password
+** Type: can be Masterseed, BIP39 mnemonic, Electrum mnemonic, Public Key (Authentikey), Password
 ** Origin: whether the Secret has been generated on the card, or imported in plaintext/encrypted form.
 ** Export rights: whether the Secret can be exported in plaintext or only in encrypted form
 ** Nb plain exports: the number of time the Secret has been exported in plaintext
@@ -110,6 +111,11 @@ You can also choose the type of export: in plaintext (if allowed) or encrypted b
 
 How to use SeedKeeper with your Satochip?
 ------------------------------------------------------------------
+
+You can import a BIP39 mnemonic, an Electrum mnemonic or the raw Masterseed into a Satochip. 
+Note that it is not recommended to import an Electrum mnemonic into a hardware wallet (even though it is possible) as it is not standard and can create compatibility issues.
+A Mnemonic can be imported in plaintext only, using any application supporting Satochip for the import (e.g. SeedKeeperTool, Electrum-Satochip, Electron Cash, Satochip-Bridge...).
+A Masterseed can be imported encrypted using the SeedKeeperTool ('Import a Secret' > 'Secure import from json'). In this case, the encrypted Masterseed can be obtained from the export menu after pairing the SeedKeeper with the Satochip.
 
 You can import a seed into a Satochip either in plaintext or encrypted. Simply insert the Satochip and use the same menu option as for seed import to a SeedKeeper (you will see that only the menu options available for a Satochip will be enabled). If the seed is in plaintext, you can use any application supporting Satochip for the import (e.g. Electrum-Satochip, Electron Cash, Satochip-Bridge...).
 

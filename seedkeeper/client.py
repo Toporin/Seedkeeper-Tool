@@ -20,8 +20,8 @@ logger.setLevel(logging.DEBUG)
                
 class Client:
     
-    dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
-    
+    dic_type= {0x30:'BIP39 mnemonic', 0x40:'Electrum mnemonic', 0x10:'Masterseed', 0x70:'Public Key', 0x90:'Password', 0xA0:'Authentikey certificate', 0xB0:'2FA secret'}
+            
     def __init__(self, cc, handler, loglevel= logging.WARNING):
         logger.setLevel(loglevel)
         logger.debug("In __init__")
@@ -248,6 +248,12 @@ class Client:
                 self.request('show_error', repr(ex))
                 return False
             
+            # TODO: option: get certificate & validation?
+            # try:
+                # self.certificate=self.cc.card_export_perso_certificate()
+            # except Exception as ex:
+                # self.certificate="(unsupported)"
+            
             #card label 
             try:
                 (response, sw1, sw2, card_label)= self.cc.card_get_label()
@@ -275,8 +281,29 @@ class Client:
         return False
         
     ############################
-    #    SEED WIZARD
-    ############################    
+    #    Secret on-card generation 
+    ############################  
+    
+    def generate_oncard(self):
+        event, values = self.handler.generate_oncard_menu()
+        if (event != 'Submit'):
+            return None
+        
+        try: 
+            stype= values['type'][0] # values['type']     
+            if stype== 'Masterseed':
+                self.generate_seed()
+            elif stype== '2FA Secret':
+                self.generate_2FA()
+            else:
+               #should not happen
+                logger.error(f'In import_secret: wrong type for import: {stype}')
+                return None
+        except Exception as ex:
+            logger.error(f"Error during secret on-card generation: {ex}")
+            self.handler.show_error(f"Error during secret on-card generation: {ex}")
+            return None 
+                
     def generate_seed(self):
         event, values = self.handler.generate_new_seed()
         
@@ -289,17 +316,44 @@ class Client:
             (response, sw1, sw2, id, fingerprint)= self.cc.seedkeeper_generate_masterseed(size, export_rights, label)
             
             if (sw1==0x90 and sw2==0x00):
-                self.handler.show_success(f'Seed generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
+                self.handler.show_success(f'Masterseed generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
             elif (sw1==0x9c and sw2==0x01):
-                self.handler.show_error(f'Error during seed generation: no memory available!')
+                self.handler.show_error(f'Error during Masterseed generation: no memory available!')
             elif (sw1==0x9c and sw2==0x04):
-                self.handler.show_error(f'Error during seed generation: SeedKeeper is not initialized!')
+                self.handler.show_error(f'Error during Masterseed generation: SeedKeeper is not initialized!')
             else:
                 self.handler.show_error(f'Unknown error: sw1={hex(sw1)} sw2={hex(sw2)}')
         else:
             #cancel or None
             return
     
+    def generate_2FA(self):
+        event, values = self.handler.generate_new_2FA_secret()
+        
+        if event== 'Submit':
+            logger.debug(values)
+            label= values['label']
+            export_rights= 0x01 if (values['export_rights']=='Export in plaintext allowed') else 0x02
+            
+            (response, sw1, sw2, id, fingerprint)= self.cc.seedkeeper_generate_2FA_secret(export_rights, label)
+            
+            if (sw1==0x90 and sw2==0x00):
+                self.handler.show_success(f'2FA secret generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
+            elif (sw1==0x9c and sw2==0x01):
+                self.handler.show_error(f'Error during 2FA secret generation: no memory available!')
+            elif (sw1==0x9c and sw2==0x04):
+                self.handler.show_error(f'Error during 2FA secret generation: SeedKeeper is not initialized!')
+            elif (sw1==0x6D and sw2==0x00):
+                self.handler.show_error(f'Error during 2FA secret generation: operation not supported!')
+            else:
+                self.handler.show_error(f'Unknown error: sw1={hex(sw1)} sw2={hex(sw2)}')
+        else:
+            #cancel or None
+            return
+    
+    ############################
+    #    Secret import 
+    ############################  
     def import_secret(self):
         
         event, values = self.handler.import_secret_menu()
@@ -323,7 +377,7 @@ class Client:
                     label= values['label']
                     export_rights= values['export_rights']
                     
-                    stype= 'Electrum seed' if mnemonic_type.startswith('Electrum') else 'BIP39 seed' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
+                    stype= 'Electrum mnemonic' if mnemonic_type.startswith('Electrum') else 'BIP39 mnemonic' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
                     secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
                     header= self.make_header(stype, export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
@@ -333,8 +387,8 @@ class Client:
                     # also import corresponding masterseed
                     masterseed_list= list( values['masterseed'] )
                     secret= [len(masterseed_list)] + masterseed_list
-                    label= 'MasterSeed from mnemonic ' + values['label']
-                    header= self.make_header('MasterSeed', export_rights, label)
+                    label= "Masterseed from mnemonic '" + values['label'] +"'"
+                    header= self.make_header('Masterseed', export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
                     authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
@@ -344,9 +398,9 @@ class Client:
                     mnemonic_type= values['mnemonic_type']
                     if mnemonic_type.startswith('Electrum'):
                         message= '  '.join([
-                                    ("You are trying to import an Electrum seed to a Satochip hardware wallet."),
-                                    ("\nElectrum seeds are not compatible with the BIP39 seeds typically used in hardware wallets."), 
-                                    ("\nThis means you may have difficulty to import this seed in another wallet in the future."),
+                                    ("You are trying to import an Electrum mnemonic to a Satochip hardware wallet."),
+                                    ("\nElectrum mnemonics are not compatible with the BIP39 mnemonics typically used in hardware wallets."), 
+                                    ("\nThis means you may have difficulty to import this mnemonic in another wallet in the future."),
                                     ("\n\nAre you sure you want to continue? If you are not sure, click on 'no'. "),
                                 ])
                         yes_no= self.handler.yes_no_question(message)
@@ -363,7 +417,7 @@ class Client:
                     self.handler.show_success(f"Mnemonic successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
                     return 1
                     
-            elif stype== 'MasterSeed':
+            elif stype== 'Masterseed':
                 event, values= self.handler.import_secret_masterseed()
                 if event != 'Submit':
                     self.handler.show_message(f"Operation cancelled")
@@ -448,8 +502,8 @@ class Client:
             
             
     def make_header(self, stype, export_rights, label):
-        dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Secure import from json':0x00, 
-                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90}
+        dic_type= {'BIP39 mnemonic':0x30, 'Electrum mnemonic':0x40, 'Masterseed':0x10, 'Secure import from json':0x00, 
+                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90, 'Authentikey certificate':0xA0, '2FA secret':0xB0}
         dic_export_rights={'Export in plaintext allowed':0x01 , 'Export encrypted only':0x02}
         id=2*[0x00]
         itype= dic_type[stype]
@@ -543,12 +597,7 @@ class Client:
                 self.handler.show_error(msg)
                 return None
         
-        else: # Satochip
-            # check if satochip is seeded:
-            if self.cc.is_seeded:
-                self.handler.show_error(f'Import aborted: Satochip is already Seeded!')
-                return None
-            
+        else: # Satochip         
             # check if authentikey_exporter is trusted
             authentikey_exporter=secret_json['authentikey_exporter']
             pubkey_hex= self.cc.card_export_trusted_pubkey()
@@ -577,40 +626,51 @@ class Client:
                 self.handler.show_error(f'Import aborted: the authentikey_exporter {authentikey_exporter[:66]} does not match the Satochip trusted_pubkey {pubkey_hex[:66]}!')
                 return None
             
-            # select MasterSeed from list (if any)
+            # select Masterseed/2FA from list (if any)
             index_list=[]
             masterseed_list=[]
+            secret_list=[]
             for index, secret_dic in enumerate(secret_json['secrets']):
                 (itype, stype, label, fingerprint)= self.parse_secret_header(secret_dic)
-                if (itype!=0x10):
+                if (itype==0x10):
+                    index_list.append(index)
+                    secret_list.append('Masterseed: ' + fingerprint + ': ' + label)
+                elif (itype==0xB0):
+                    index_list.append(index)
+                    secret_list.append('2FA secret: ' + fingerprint + ': ' + label)
+                else:
                     continue
-                index_list.append(index)
-                masterseed_list.append('MasterSeed: ' + fingerprint + ': ' + label)
             if ( len(index_list)==0 ):
-                self.handler.show_error(f'Import aborted: no MasterSeed found in json!')
+                self.handler.show_error(f'Import aborted: no Masterseed or 2FA found in json!')
                 return None
             else:
-                event2, values2 = self.handler.choose_masterseed_from_list(masterseed_list)
+                event2, values2 = self.handler.choose_secret_from_list(secret_list)
                 if event2=='Submit':
-                    index= index_list[ masterseed_list.index(values2['masterseed_list'][0]) ] #values2['masterseed_list'] is a list
+                    index= index_list[ secret_list.index(values2['secret_list'][0]) ] #values2['secret_list'] is a list
                 else:
                     self.handler.show_notification('Information: ', 'Secure import cancelled by user')
                     return None
                 
             # do the import
             secret_dic= secret_json['secrets'][index] 
+            (itype, stype, label, fingerprint)= self.parse_secret_header(secret_dic)
             try:
-                authentikey = self.cc.card_bip32_import_encrypted_seed(secret_dic)
-                authentikey_hex= authentikey.get_public_key_bytes(compressed=True).hex()
-                self.handler.show_success(f'Successfully imported masterseed to Satochip with authentikey: {authentikey_hex}')
-                return 1
+                if itype==0x10: #masterseed
+                    authentikey = self.cc.card_import_encrypted_secret(secret_dic)
+                    authentikey_hex= authentikey.get_public_key_bytes(compressed=True).hex()
+                    self.handler.show_success(f'Successfully imported masterseed to Satochip with authentikey: {authentikey_hex}')
+                    return 1
+                elif itype==0xB0: #2FA
+                    self.cc.card_import_encrypted_secret(secret_dic)
+                    self.handler.show_success(f'Successfully imported 2FA with fingerprint {fingerprint} to Satochip!')
+                    return 1
             except Exception as ex:
                 self.handler.show_error(str(ex))
                 return None
         
     def  get_secret_header_list(self):
         # get a list of all the secrets & pubkeys available
-        #dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
+        #dic_type= {0x30:'BIP39 mnemonic', 0x40:'Electrum mnemonic', 0x10:'Masterseed', 0x70:'Public Key', 0x90:'Password'}
         label_list=[]
         id_list=[]
         label_pubkey_list=['None (export to plaintext)']
@@ -671,4 +731,3 @@ class Client:
 
         return itype, stype, label, fingerprint
     
-    # print("DEBUG END client.py ")
