@@ -208,7 +208,7 @@ class Client:
                 ublk_tries_1= 0x01
                 pin_1= list(urandom(16)); #the second pin is not used currently
                 ublk_1= list(urandom(16));
-                secmemsize= 0x0000 # RFU
+                secmemsize= 32 #0x0000 # => for satochip - TODO: hardcode value?
                 memsize= 0x0000 # RFU
                 create_object_ACL= 0x01 # RFU
                 create_key_ACL= 0x01 # RFU
@@ -391,8 +391,7 @@ class Client:
                     header= self.make_header('Masterseed', export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
-                    authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    self.handler.show_success(f"Mnemonic successfully imported with id {sid} & fingerprint {fingerprint} \nMasterseed successfully imported with id {sid2} & fingerprint {fingerprint2} \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Mnemonic successfully imported with id {sid} & fingerprint {fingerprint} \nMasterseed successfully imported with id {sid2} & fingerprint {fingerprint2}")
                     return 2
                 else: #Satochip
                     mnemonic_type= values['mnemonic_type']
@@ -411,10 +410,7 @@ class Client:
                     authentikey= self.cc.card_bip32_import_seed(masterseed_list)
                     if authentikey==None:
                         raise Exception("Error during mnemonic import: maybe the Satochip is already seeded.")
-                    authentikey_hex= authentikey.get_public_key_bytes(True).hex()
-                    authentikey_hex2= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    assert authentikey_hex==authentikey_hex2, f"Authentikey mismatch {authentikey_hex} {authentikey_hex2}"
-                    self.handler.show_success(f"Mnemonic successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Mnemonic successfully imported to Satochip!")
                     return 1
                     
             elif stype== 'Masterseed':
@@ -431,14 +427,10 @@ class Client:
                     header= self.make_header(stype, export_rights, label)
                     secret_dic={'header':header, 'secret':secret}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                    authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    self.handler.show_success(f"Masterseed successfully imported with id {sid} & fingerprint {fingerprint} \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Masterseed successfully imported with id {sid} & fingerprint {fingerprint}")
                 else: #Satochip
                     authentikey= self.cc.card_bip32_import_seed(masterseed_list)
-                    authentikey_hex= authentikey.get_public_key_bytes(True).hex()
-                    authentikey_hex2= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    assert authentikey_hex==authentikey_hex2, f"Authentikey mismatch {authentikey_hex} {authentikey_hex2}"
-                    self.handler.show_success(f"Masterseed successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Masterseed successfully imported to Satochip!")
                 return 1
                     
             elif stype== 'Secure import from json':

@@ -539,6 +539,10 @@ class HandlerSimpleGUI:
         # get a list of all the secrets & pubkeys available
         (label_list, id_list, label_pubkey_list, id_pubkey_list)= self.client.get_secret_header_list()
         
+        if len(label_list)==0:
+            self.show_message(f'SeedKeeper is empty - No secret to export!')
+            return
+        
         layout = [
             [sg.Text('Secret to export: ', size=(10, 1)), sg.InputCombo(label_list, key='label_list', size=(50, 1)) ], 
             [sg.Text('Authentikey: ', size=(10, 1)), sg.InputCombo(label_pubkey_list, key='label_pubkey_list', size=(50, 1)) ],
@@ -792,13 +796,14 @@ class HandlerSimpleGUI:
     def logs_menu(self):
         logger.debug('In logs_menu')
         ins_dic={0x40:'Create PIN', 0x42:'Verify PIN', 0x44:'Change PIN', 0x46:'Unblock PIN', 
-                        0xA0:'Generate masterseed', 0xA5:'Reset secret',
+                        0xA0:'Generate masterseed', 0xA5:'Reset secret', 0xAE:'Generate 2FA Secret',
                         0xA1:'Import secret', 0xA1A:'Import plain secret', 0xA1B:'Import encrypted secret', 
-                        0xA2:'Export secret', 0xA2A:'Export plain secret', 0xA2B:'Export encrypted secret'}
+                        0xA2:'Export secret', 0xA2A:'Export plain secret', 0xA2B:'Export encrypted secret',
+                        0xFF:'RESET TO FACTORY'}
         res_dic={0x9000:'OK', 0x63C0:'PIN failed', 0x9C03:'Operation not allowed', 0x9C04:'Setup not done', 0x9C05:'Feature unsupported', 
                         0x9C01:'No memory left', 0x9C08:'Secret not found', 0x9C10:'Incorrect P1', 0x9C11:'Incorrect P2', 0x9C0F:'Invalid parameter',
                         0x9C0B:'Invalid signature', 0x9C0C:'Identity blocked', 0x9CFF:'Internal error', 0x9C30:'Lock error', 0x9C31:'Export not allowed',
-                        0x9C32:'Import data too long', 0x9C33:'Wrong MAC during import'}                
+                        0x9C32:'Import data too long', 0x9C33:'Wrong MAC during import', 0x0000:'Unexpected error'}                
         
         try:
             (logs, nbtotal_logs, nbavail_logs)= self.client.cc.seedkeeper_print_logs(print_all=True)
@@ -831,6 +836,9 @@ class HandlerSimpleGUI:
                 result= res_dic.get( log[3], hex(log[3]) )
             
             strlogs.append([ins, id1, id2, result])
+        
+        if len(strlogs)==0:
+            strlogs.append(['', '', '', ''])
         
         txt1= f'Number of events recorded: {nbtotal_logs} out of {nbavail_logs} available'
         layout = [
@@ -872,7 +880,9 @@ class HandlerSimpleGUI:
             fingerprint= header['fingerprint']
             
             strheaders.append([sid, label, stype, origin, export_rights, export_nbplain, export_nbsecure, export_nbcounter, fingerprint])
-            
+        
+        if len(strheaders)==0:
+            strheaders.append(['', '', '', '', '', '', '', '', ''])
          
         layout = [
                       [sg.Text(txt, size=(60,1))],
@@ -1043,7 +1053,7 @@ class HandlerSimpleGUI:
                 window2.close()  
                 del window2
                 
-            elif event=='Ok' or event=='Cancel':
+            elif event=='Ok' or event=='Cancel' or event==None:
                 break
         
         window.close()  
@@ -1064,7 +1074,7 @@ class HandlerSimpleGUI:
         window = sg.Window("Help manual", layout, icon=self.satochip_icon).finalize()
         while True:
             event, values = window.read()  
-            if event=='Ok' or event=='Cancel':
+            if event=='Ok' or event=='Cancel' or event==None:
                 break
             if event== 'lang':
                 path = os.path.join(self.pkg_dir, 'help/'+values['lang']+'.txt')
