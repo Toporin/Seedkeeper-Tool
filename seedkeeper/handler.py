@@ -177,6 +177,22 @@ class HandlerSimpleGUI:
         data = values['data']
         return (is_data, data)
      
+    def QRDialog(self, data, title = "SeedKeeperTool: QR code", msg= ''):
+        logger.debug('In QRDialog')
+        import pyqrcode
+        code = pyqrcode.create(data)
+        image_as_str = code.png_as_base64_str(scale=5, quiet_zone=2) #string
+        image_as_str= base64.b64decode(image_as_str) #bytes
+        
+        layout = [[sg.Image(data=image_as_str, tooltip=None, visible=True)],
+                        [sg.Text(msg)],
+                        [sg.Button('Ok'), sg.Button('Cancel')]]     
+        window = sg.Window(title, layout, icon=self.satochip_icon)    
+        event, values = window.read()        
+        window.close()
+        del window
+        return (event, values) 
+     
     def setup_card(self):
         logger.debug('In setup_card')
         layout = [
@@ -551,10 +567,11 @@ class HandlerSimpleGUI:
             [sg.Text('Type: ', size=(10, 1)), sg.Text(key='type')],
             [sg.Text('Origin: ', size=(10, 1)), sg.Text(key='origin')],
             [sg.Multiline(key='secret', size=(60, 4) )],
-            [sg.Button('Export', bind_return_key=True), sg.Button('Close') ] # sg.Cancel()
+            [sg.Button('Export', bind_return_key=True), sg.Button('Show QR Code', key='show_qr'), sg.Button('Close') ] # sg.Cancel()
         ]   
         
         window = sg.Window('SeedKeeper export', layout)      
+        secret=''
         while True:      
             event, values = window.read()      
             logger.debug(f"event: {event}")
@@ -685,7 +702,11 @@ class HandlerSimpleGUI:
                     window['fingerprint'].update("N/A")      
                     window['label'].update("N/A")    
                     window['origin'].update("N/A")   
-                
+            
+            elif event=='show_qr':
+                data= secret
+                self.QRDialog(data, title = "SeedKeeperTool: QR code", msg= '')
+            
             else:      
                 break      
             

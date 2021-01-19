@@ -1,6 +1,5 @@
-#PyQRCode==1.2.1  #todo: remove
-#pypng==0.0.20   #todo: remove
-#pyperclip==1.7.0 #todo: remove
+PyQRCode==1.2.1 
+pypng==0.0.20  
 mnemonic==0.19
 ecdsa==0.15
 pyscard==1.9.9
