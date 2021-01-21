@@ -322,7 +322,7 @@ class Client:
             elif (sw1==0x9c and sw2==0x04):
                 self.handler.show_error(f'Error during Masterseed generation: SeedKeeper is not initialized!')
             else:
-                self.handler.show_error(f'Unknown error: sw1={hex(sw1)} sw2={hex(sw2)}')
+                self.handler.show_error(f'Unknown error (error code {hex(256*sw1+sw2)})')
         else:
             #cancel or None
             return
@@ -346,7 +346,7 @@ class Client:
             elif (sw1==0x6D and sw2==0x00):
                 self.handler.show_error(f'Error during 2FA secret generation: operation not supported!')
             else:
-                self.handler.show_error(f'Unknown error: sw1={hex(sw1)} sw2={hex(sw2)}')
+                self.handler.show_error(f'Unknown error (error code {hex(256*sw1+sw2)})')
         else:
             #cancel or None
             return
@@ -378,18 +378,18 @@ class Client:
                     export_rights= values['export_rights']
                     
                     stype= 'Electrum mnemonic' if mnemonic_type.startswith('Electrum') else 'BIP39 mnemonic' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
-                    secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+                    secret_list= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     #self.handler.show_success(f"Secret successfully imported with id {sid}")
                     
                     # also import corresponding masterseed
                     masterseed_list= list( values['masterseed'] )
-                    secret= [len(masterseed_list)] + masterseed_list
+                    secret_list= [len(masterseed_list)] + masterseed_list
                     label= "Masterseed from mnemonic '" + values['label'] +"'"
                     header= self.make_header('Masterseed', export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Mnemonic successfully imported with id {sid} & fingerprint {fingerprint} \nMasterseed successfully imported with id {sid2} & fingerprint {fingerprint2}")
                     return 2
@@ -421,11 +421,11 @@ class Client:
                 masterseed= values['masterseed']
                 masterseed_list= list( bytes.fromhex(masterseed) )
                 if (self.cc.card_type=='SeedKeeper'):
-                    secret= [len(masterseed_list)] + masterseed_list
+                    secret_list= [len(masterseed_list)] + masterseed_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Masterseed successfully imported with id {sid} & fingerprint {fingerprint}")
                 else: #Satochip
@@ -452,11 +452,11 @@ class Client:
                 authentikey= values['pubkey']
                 authentikey_list= list( bytes.fromhex(authentikey) )
                 if (self.cc.card_type=='SeedKeeper'):
-                    secret= [len(authentikey_list)] + authentikey_list
+                    secret_list= [len(authentikey_list)] + authentikey_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Authentikey {authentikey} imported with id {sid} & fingerprint {fingerprint}")
                     return sid
@@ -470,11 +470,11 @@ class Client:
                 if event == 'Submit':
                     password= values['password']
                     password_list= list( password.encode('utf-8') )
-                    secret= [len(password_list)] + password_list
+                    secret_list= [len(password_list)] + password_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid} & fingerprint {fingerprint}")
                     return 1
@@ -491,25 +491,7 @@ class Client:
             logger.error(f"Error during secret import: {ex}")
             self.handler.show_error(f"Error during secret import: {ex}")
             return None
-            
-            
-    def make_header(self, stype, export_rights, label):
-        dic_type= {'BIP39 mnemonic':0x30, 'Electrum mnemonic':0x40, 'Masterseed':0x10, 'Secure import from json':0x00, 
-                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90, 'Authentikey certificate':0xA0, '2FA secret':0xB0}
-        dic_export_rights={'Export in plaintext allowed':0x01 , 'Export encrypted only':0x02}
-        id=2*[0x00]
-        itype= dic_type[stype]
-        origin= 0x00
-        export= dic_export_rights[export_rights]
-        export_counters=3*[0x00]
-        fingerprint= 4*[0x00]
-        rfu=2*[0x00]
-        label_size= len(label)
-        label_list= list(label.encode('utf8'))
-        header_list= id + [itype, origin, export] + export_counters + fingerprint + rfu + [label_size] + label_list
-        header_hex= bytes(header_list).hex()
-        return header_hex
-     
+          
     def import_secure_secret(self):
         logger.debug("In import_secure_secret()") #debugSatochip
         
@@ -542,7 +524,7 @@ class Client:
             for header_dic in headers:
                 if header_dic['type']==0x70:
                     secret_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
-                    pubkey= secret_dic['secret_hex'][2:]
+                    pubkey= secret_dic['secret'][2:]
                     if pubkey== authentikey_exporter:
                         sid_pubkey= header_dic['id']
                         logger.debug('Found sid_pubkey: ' + str(sid_pubkey) )
@@ -556,9 +538,9 @@ class Client:
                     yes_no= self.handler.yes_no_question(f"The following authentikey has been found in the TrustStore: \n\tAuthentikey: {authentikey_exporter_comp} \n\tLabel: '{card_label}' \nContinue import with this authentikey?")
                     if yes_no:
                         pubkey_list= list( bytes.fromhex(authentikey_exporter) )
-                        secret= [len(pubkey_list)] + pubkey_list
+                        secret_list= [len(pubkey_list)] + pubkey_list
                         header= self.make_header('Authentikey from TrustStore', 'Export in plaintext allowed', card_label+' authentikey')
-                        secret_dic={'header':header, 'secret':secret}
+                        secret_dic={'header':header, 'secret_list':secret_list}
                         (sid_pubkey, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                         self.handler.show_notification('Information: ', f"Authentikey '{card_label}' successfully imported with id {sid_pubkey}" )
                     else:
@@ -659,7 +641,11 @@ class Client:
             except Exception as ex:
                 self.handler.show_error(str(ex))
                 return None
-        
+    
+    ############################
+    #    Utils
+    ############################  
+    
     def  get_secret_header_list(self):
         # get a list of all the secrets & pubkeys available
         #dic_type= {0x30:'BIP39 mnemonic', 0x40:'Electrum mnemonic', 0x10:'Masterseed', 0x70:'Public Key', 0x90:'Password'}
@@ -675,7 +661,7 @@ class Client:
                 id_list.append( header_dic['id'] )
                 if header_dic['type']==0x70:
                     pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain #todo: compressed form?
-                    pubkey= pubkey_dic['secret_hex'][2:10]
+                    pubkey= pubkey_dic['secret'][2:10]
                     label_pubkey_list.append('In SeedKeeper: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
                     id_pubkey_list.append( header_dic['id'] )
                     fingerprint_pubkey_list.append(header_dic['fingerprint'])
@@ -707,6 +693,24 @@ class Client:
                 authentikey_list.append(authentikey)
                
         return label_authentikey_list, authentikey_list
+    
+    #TODO: use pysatochip.cardConnector.make_header()
+    def make_header(self, stype, export_rights, label):
+        dic_type= {'BIP39 mnemonic':0x30, 'Electrum mnemonic':0x40, 'Masterseed':0x10, 'Secure import from json':0x00, 
+                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90, 'Authentikey certificate':0xA0, '2FA secret':0xB0}
+        dic_export_rights={'Export in plaintext allowed':0x01 , 'Export encrypted only':0x02}
+        id=2*[0x00]
+        itype= dic_type[stype]
+        origin= 0x00
+        export= dic_export_rights[export_rights]
+        export_counters=3*[0x00]
+        fingerprint= 4*[0x00]
+        rfu=2*[0x00]
+        label_size= len(label)
+        label_list= list(label.encode('utf8'))
+        header_list= id + [itype, origin, export] + export_counters + fingerprint + rfu + [label_size] + label_list
+        header_hex= bytes(header_list).hex()
+        return header_hex
         
     def parse_secret_header(self, secret_dic):
         header_list= list(bytes.fromhex(secret_dic['header']))[2:] #first 2 bytes is sid

@@ -611,7 +611,7 @@ class HandlerSimpleGUI:
                     else:
                         window['origin'].update('Unknown')   
                     #TODO: parse secret depending to type for all cases (in CardDataParser?)
-                    secret_list= secret_dict['secret']
+                    secret_list= secret_dict['secret_list']
                     
                     #plain export
                     if sid_pubkey is None: 
@@ -652,7 +652,7 @@ class HandlerSimpleGUI:
                             window['type'].update('Password') 
                             window['secret'].update(secret)   
                         elif (secret_dict['type']== 0xA0): #certificate
-                            secret= "Raw hex: "+secret_dict['secret_hex']  #TODO
+                            secret= "Raw hex: "+bytes(secret_list).hex() #TODO
                             window['type'].update('Certificate') 
                             window['secret'].update(secret)   
                         elif (secret_dict['type']== 0xB0): #2FA
@@ -660,7 +660,7 @@ class HandlerSimpleGUI:
                             window['type'].update('2FA') 
                             window['secret'].update(secret)   
                         else:
-                            secret= "Raw hex: "+secret_dict['secret_hex']  
+                            secret= "Raw hex: "+bytes(secret_list).hex()
                             window['type'].update('Unknown') 
                             window['secret'].update(secret) 
                     
@@ -669,7 +669,7 @@ class HandlerSimpleGUI:
                         window['type'].update('Encrypted Secret') 
                         try:
                             secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
-                            authentikey_importer= secret_dict_pubkey['secret_hex'][2:]
+                            authentikey_importer= secret_dict_pubkey['secret'][2:]
                         except Exception as ex:
                             logger.warning('Exception during pubkey export: '+str(ex))
                             authentikey_importer= "(unknown)"
@@ -685,10 +685,10 @@ class HandlerSimpleGUI:
                                                     'rfu1': secret_dict['rfu1'], 
                                                     'rfu2': secret_dict['rfu2'], 
                                                     'fingerprint': secret_dict['fingerprint'], 
-                                                    'header': bytes(secret_dict['header']).hex(), 
-                                                    'iv': bytes(secret_dict['iv']).hex(), 
-                                                    'secret_encrypted': bytes(secret_list).hex(),  #'secret_base64':base64.encodebytes( bytes(secret_list) ).decode('utf8')
-                                                    'hmac': bytes(secret_dict['hmac']).hex(), 
+                                                    'header': secret_dict['header'], #bytes(secret_dict['header']).hex(), 
+                                                    'iv': secret_dict['iv'], #bytes(secret_dict['iv']).hex(), 
+                                                    'secret_encrypted': secret_dict['secret_encrypted'], #bytes(secret_list).hex(),  #'secret_base64':base64.encodebytes( bytes(secret_list) ).decode('utf8')
+                                                    'hmac': secret_dict['hmac'], #bytes(secret_dict['hmac']).hex(), 
                                                 }],
                                             }
                         secret= json.dumps(secret_obj)
@@ -696,7 +696,6 @@ class HandlerSimpleGUI:
                         
                         
                 except (SeedKeeperError, UnexpectedSW12Error) as ex:
-                    #window['secret_field'].update('Secret: ')    
                     window['secret'].update(str(ex))      
                     window['type'].update("N/A")      
                     window['fingerprint'].update("N/A")      
@@ -747,7 +746,7 @@ class HandlerSimpleGUI:
                 if isinstance(sid_pubkey, int): # from device
                     try:
                         secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
-                        authentikey_importer= secret_dict_pubkey['secret_hex'][2:]
+                        authentikey_importer= secret_dict_pubkey['secret'][2:]
                     except Exception as ex:
                         logger.warning('Exception during pubkey export: '+str(ex))
                         authentikey_importer= "(unknown)"
@@ -782,15 +781,14 @@ class HandlerSimpleGUI:
                         continue
                     try: 
                         secret_dict= self.client.cc.seedkeeper_export_secret(sid, sid_pubkey)
-                        secret_list= secret_dict['secret']
                         secret= {  
                                         'label': secret_dict['label'], 
                                         'type': secret_dict['type'],    
                                         'fingerprint': secret_dict['fingerprint'], 
-                                        'header': bytes(secret_dict['header']).hex(), 
-                                        'iv': bytes(secret_dict['iv']).hex(), 
-                                        'secret_encrypted': bytes(secret_list).hex(), 
-                                        'hmac': bytes(secret_dict['hmac']).hex(), 
+                                        'header': secret_dict['header'], #bytes(secret_dict['header']).hex(), 
+                                        'iv': secret_dict['iv'], #bytes(secret_dict['iv']).hex(), 
+                                        'secret_encrypted': secret_dict['secret_encrypted'], #bytes(secret_list).hex(), 
+                                        'hmac': secret_dict['hmac'], #bytes(secret_dict['hmac']).hex(), 
                                     }
                         secrets_obj['secrets'].append(secret)
                         nb_secrets+=1
