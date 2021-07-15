@@ -549,7 +549,7 @@ class Client:
             for header_dic in headers:
                 if header_dic['type']==0x70:
                     secret_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
-                    pubkey= secret_dic['secret'][2:]
+                    pubkey= secret_dic['secret'][2:] # [0:2] is the pubkey size in hex
                     if pubkey== authentikey_exporter:
                         sid_pubkey= header_dic['id']
                         logger.debug('Found sid_pubkey: ' + str(sid_pubkey) )
@@ -686,7 +686,7 @@ class Client:
                 id_list.append( header_dic['id'] )
                 if header_dic['type']==0x70:
                     pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain #todo: compressed form?
-                    pubkey= pubkey_dic['secret'][2:10]
+                    pubkey= pubkey_dic['secret'][2:10] # [0:2] is the pubkey size in hex
                     label_pubkey_list.append('In SeedKeeper: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
                     id_pubkey_list.append( header_dic['id'] )
                     fingerprint_pubkey_list.append(header_dic['fingerprint'])

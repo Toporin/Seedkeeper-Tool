@@ -592,10 +592,10 @@ class HandlerSimpleGUI:
                 if isinstance(sid_pubkey, str): 
                     authentikey= sid_pubkey
                     authentikey_list= list( bytes.fromhex(authentikey) )
-                    secret= [len(authentikey_list)] + authentikey_list
+                    secret_list= [len(authentikey_list)] + authentikey_list
                     label= self.client.truststore.get(authentikey,{}).get('card_label', '') + ' authentikey'#self.client.truststore[authentikey] + ' authentikey'
                     header= self.client.make_header('Authentikey from TrustStore', 'Export in plaintext allowed', label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
                     self.show_notification('Information: ', f"Authentikey '{label}' imported from TrustStore with id {sid_pubkey}")
                     # update sid_pubkey in id_pubkey_list to reflect change (so that authentikey is only imported once from truststore to device...)
@@ -672,7 +672,7 @@ class HandlerSimpleGUI:
                         window['type'].update('Encrypted Secret') 
                         try:
                             secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
-                            authentikey_importer= secret_dict_pubkey['secret'][2:]
+                            authentikey_importer= secret_dict_pubkey['secret'][2:] # [0:2] is the pubkey_size in hex
                         except Exception as ex:
                             logger.warning('Exception during pubkey export: '+str(ex))
                             authentikey_importer= "(unknown)"
@@ -749,7 +749,7 @@ class HandlerSimpleGUI:
                 if isinstance(sid_pubkey, int): # from device
                     try:
                         secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
-                        authentikey_importer= secret_dict_pubkey['secret'][2:]
+                        authentikey_importer= secret_dict_pubkey['secret'][2:] # [0:2] is the keysize in hex
                     except Exception as ex:
                         logger.warning('Exception during authentikey export: '+str(ex))
                         authentikey_importer= "(unknown)"
@@ -757,10 +757,10 @@ class HandlerSimpleGUI:
                     try:
                         authentikey_importer= sid_pubkey
                         authentikey_list= list( bytes.fromhex(authentikey_importer) )
-                        secret= [len(authentikey_list)] + authentikey_list
+                        secret_list= [len(authentikey_list)] + authentikey_list
                         label= self.client.truststore.get(authentikey_importer,{}).get('card_label', '') + ' authentikey' #self.client.truststore[authentikey_importer] + ' authentikey'
                         header= self.client.make_header('Authentikey from TrustStore',  'Export in plaintext allowed', label)
-                        secret_dic={'header':header, 'secret':secret}
+                        secret_dic={'header':header, 'secret_list':secret_list}
                         (sid_pubkey, fingerprint) = self.client.cc.seedkeeper_import_secret(secret_dic)
                         self.show_notification('Information: ', f"Authentikey '{label} imported from TrustStore with id {sid_pubkey}")
                         # update sid_pubkey in id_pubkey_list to reflect change (so that authentikey is only imported once from truststore to device...)
