@@ -41,7 +41,7 @@ pushd $WINEPREFIX/drive_c/electrum
 # see https://github.com/pypa/pip/issues/2195 -- pip makes a copy of the entire directory
 info "Pip installing SeedKeeperTool. This might take a long time if the project folder is large."
 $PYTHON -m pip install --no-warn-script-location .
-$PYTHON -m pip install --no-warn-script-location /pypackage # to install pysatochip package from local folder
+#$PYTHON -m pip install --no-warn-script-location /pypackage # to install pysatochip package from local folder
 popd
 
 rm -rf dist/
