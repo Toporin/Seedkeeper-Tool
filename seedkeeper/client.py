@@ -122,7 +122,7 @@ class Client:
             # logger.debug('Device pubkey: '+ bytes(pubkey).hex())
         # except CardException as ex:
             # msg= ''.join(["Unable to verify card: feature unsupported! \n", 
-                                # "Authenticity validation is only available starting with Satochip v0.13 and higher"])
+                                # "Authenticity validation is only available starting with Satochip v0.12 and higher"])
             # self.handler.show_error(msg)
             # break
         # except UnexpectedSW12Error as ex:
@@ -133,10 +133,10 @@ class Client:
         cert_pem=txt_error=""
         try:
             cert_pem=self.cc.card_export_perso_certificate()
-            #logger.debug('Cert PEM: '+ str(cert_pem))
+            logger.debug('Cert PEM: '+ str(cert_pem))
         except CardError as ex:
             txt_error= ''.join(["Unable to get device certificate: feature unsupported! \n", 
-                                "Authenticity validation is only available starting with Satochip v0.13 and higher"])
+                                "Authenticity validation is only available starting with Satochip v0.12 and higher"])
         except CardNotPresentError as ex:
             txt_error= "No card found! Please insert card."
         except UnexpectedSW12Error as ex:
@@ -174,16 +174,41 @@ class Client:
             (response, sw1, sw2, d)=self.cc.card_get_status()
             
             # check version
-            if  (self.cc.setup_done):
-                #v_supported= CardConnector.SATOCHIP_PROTOCOL_VERSION 
+            if (self.cc.card_type=='Satochip'):
                 v_supported= SATOCHIP_PROTOCOL_VERSION 
                 v_applet= d["protocol_version"] 
-                logger.info(f"Satochip version={hex(v_applet)} Electrum supported version= {hex(v_supported)}")#debugSatochip
+                logger.info(f"Satochip version={v_applet} SeedKeeperTool supported version= {v_supported}")#debugSatochip
+                if (v_applet<12): # v0.12 is the minimum version supported by SeedKeeperTool
+                    msg=(('The version of your Satochip does not support SeedKeeperTool')+ '\n' 
+                                + f'    Satochip version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                + f'    Minimum supported version: 0.12')
+                    self.request('show_error', msg)
+                    #return False #?
+                elif (v_supported<v_applet):
+                    msg=(('The version of your Satochip is higher than supported by SeedKeeperTool. You should update SeedKeeperTool to ensure correct functioning!')+ '\n' 
+                                + f'    Satochip version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                + f'    Supported version: {SATOCHIP_PROTOCOL_MAJOR_VERSION}.{SATOCHIP_PROTOCOL_MINOR_VERSION}')
+                    self.request('show_error', msg)            
+            elif (self.cc.card_type=='SeedKeeper'):
+                v_supported= SEEDKEEPER_PROTOCOL_VERSION 
+                v_applet= d["protocol_version"] 
+                logger.info(f"SeedKeeper version={v_applet} SeedKeeperTool supported version= {v_supported}")#debugSatochip
                 if (v_supported<v_applet):
-                    msg=(('The version of your Satochip is higher than supported by SeedKeeper. You should update SeedKeeper to ensure correct functioning!')+ '\n' 
+                    msg=(('The version of your SeedKeeper is higher than supported by SeedKeeperTool. You should update SeedKeeperTool to ensure correct functioning!')+ '\n' 
                                 + f'    SeedKeeper version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
                                 + f'    Supported version: {SEEDKEEPER_PROTOCOL_MAJOR_VERSION}.{SEEDKEEPER_PROTOCOL_MINOR_VERSION}')
                     self.request('show_error', msg)
+            
+            if  (self.cc.setup_done):
+                #v_supported= CardConnector.SATOCHIP_PROTOCOL_VERSION 
+                # v_supported= SATOCHIP_PROTOCOL_VERSION 
+                # v_applet= d["protocol_version"] 
+                # logger.info(f"Satochip version={hex(v_applet)} Electrum supported version= {hex(v_supported)}")#debugSatochip
+                # if (v_supported<v_applet):
+                    # msg=(('The version of your Satochip is higher than supported by SeedKeeper. You should update SeedKeeper to ensure correct functioning!')+ '\n' 
+                                # + f'    SeedKeeper version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                # + f'    Supported version: {SEEDKEEPER_PROTOCOL_MAJOR_VERSION}.{SEEDKEEPER_PROTOCOL_MINOR_VERSION}')
+                    # self.request('show_error', msg)
                 
                 if (self.cc.needs_secure_channel):
                     self.cc.card_initiate_secure_channel() 

@@ -25,10 +25,10 @@ In order to clarify concepts, here are a few terms that will be use throughout t
 * PIN code: a 4-16 characters password used to unlock a SeedKeeper or Satochip. Any sensitive command requires to unlock the PIN device first. After the wrong PIN is input several times (typically 5), the device bricks itself and cannot be used anymore! 
 * Seed: is the generic term to designate the secret data that is used to setup a wallet and access funds. A seed can take the form of a Mnemonic list or raw bytes (Masterseed).
 * Mnemonic: is a human-readable list of 12 to 24 words that allows to generate or recover a wallet and spend the funds.
-* Masterseed: is a 16 to 32 bytes secret derived from the masterseed. It is this value that is ultimately used as input to the BIP32 derivation process.
+* Masterseed: is a 16 to 32 bytes secret derived from the Mnemonic. It is this value that is ultimately used as input to the BIP32 derivation process.
 * Authentikey: is a public/private elliptic curve keypair that is unique per SeedKeeper device (and Satochip) and that can be used to authenticate a device and initiate communication with it.
 * 2FA secret: is 20-byte random secret that can be used in a Satochip as second-factor authentication. If 2FA is enabled, all transactions must be approved on a second device such as a smartphone.
-* Truststore: in the SeedKeeperTool application, the truststore keeps a list of public key authentikeys for each SeedKeeper device connected so far. The Trustore is cleared upon application closing.
+* Truststore: in the SeedKeeperTool application, the Truststore keeps a list of public key authentikeys for each SeedKeeper device connected so far. The Trustore is cleared upon application closing.
 * SeedKeeperTool: this application used to communicate with a SeedKeeper
 
 SeedKeeper overview
@@ -73,7 +73,7 @@ The SeedKeeperTool provides the following menu:
 ** an existing Masterseed
 ** an encrypted seed in JSON format
 ** an authentikey from the Truststore (used to pair 2 devices)
-** a trusted pubkey (also used to pair 2 devices, but does not come from the truststore)
+** a trusted pubkey (also used to pair 2 devices, but does not come from the Truststore)
 ** a Password (a generic secret that you would like to store securely, e.g. the master password from a password manager application)
 
 * Export a Secret: export any of the Secret stored in the SeedKeeper. 

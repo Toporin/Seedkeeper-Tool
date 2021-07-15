@@ -1,4 +1,4 @@
 from . import seedkeeper
-# from .version import SEEDKEEPER_VERSION
-# __version__ = SEEDKEEPER_VERSION 
+# from .version import SEEDKEEPERTOOL_VERSION
+# __version__ = SEEDKEEPERTOOL_VERSION 
 

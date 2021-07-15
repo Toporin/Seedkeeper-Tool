@@ -29,7 +29,7 @@ version_spec.loader.exec_module(version_module)
 
 setup(
     name="SeedKeeper",
-    version=version.SEEDKEEPER_VERSION,
+    version=version.SEEDKEEPERTOOL_VERSION,
     python_requires='>={}'.format(MIN_PYTHON_VERSION),
     install_requires=requirements,
     packages=['seedkeeper'],

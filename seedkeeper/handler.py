@@ -15,6 +15,7 @@ from pysatochip.CardConnector import CardConnector
 from pysatochip.CardConnector import UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error, CardError
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
 from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PROTOCOL_MINOR_VERSION, SEEDKEEPER_PROTOCOL_VERSION
+from pysatochip.version import PYSATOCHIP_VERSION
 
 # print("DEBUG START handler.py ")
 # print("DEBUG START handler.py __name__: "+__name__)
@@ -22,9 +23,11 @@ from pysatochip.version import SEEDKEEPER_PROTOCOL_MAJOR_VERSION, SEEDKEEPER_PRO
 
 try: 
     import electrum_mnemonic
+    from version import SEEDKEEPERTOOL_VERSION
 except Exception as e:
     print('handler.py importError: '+repr(e))
     from . import electrum_mnemonic
+    from .version import SEEDKEEPERTOOL_VERSION
     
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -570,7 +573,7 @@ class HandlerSimpleGUI:
             [sg.Button('Export', bind_return_key=True), sg.Button('Show QR Code', key='show_qr'), sg.Button('Close') ] # sg.Cancel()
         ]   
         
-        window = sg.Window('SeedKeeper export', layout)      
+        window = sg.Window('SeedKeeper export', layout, icon=self.satochip_icon)      
         secret=''
         while True:      
             event, values = window.read()      
@@ -733,7 +736,7 @@ class HandlerSimpleGUI:
             [sg.Button('Backup', bind_return_key=True), sg.Button('Close') ] # sg.Cancel()
         ]   
         
-        window = sg.Window('SeedKeeper backup', layout)     
+        window = sg.Window('SeedKeeper backup', layout, icon=self.satochip_icon)     
         backup=''
         while True:      
             event, values = window.read()      
@@ -748,7 +751,7 @@ class HandlerSimpleGUI:
                         secret_dict_pubkey= self.client.cc.seedkeeper_export_secret(sid_pubkey)
                         authentikey_importer= secret_dict_pubkey['secret'][2:]
                     except Exception as ex:
-                        logger.warning('Exception during pubkey export: '+str(ex))
+                        logger.warning('Exception during authentikey export: '+str(ex))
                         authentikey_importer= "(unknown)"
                 elif isinstance(sid_pubkey, str): #from truststore 
                     try:
@@ -780,6 +783,7 @@ class HandlerSimpleGUI:
                     if sid==sid_pubkey:
                         continue
                     try: 
+                        logger.warning(f'Debug sid_pubkey: {sid_pubkey} of type: {type(sid_pubkey)}')#debug
                         secret_dict= self.client.cc.seedkeeper_export_secret(sid, sid_pubkey)
                         secret= {  
                                         'label': secret_dict['label'], 
@@ -793,7 +797,8 @@ class HandlerSimpleGUI:
                         secrets_obj['secrets'].append(secret)
                         nb_secrets+=1
                         window['nb_secrets'].update(nb_secrets)   
-                    except (SeedKeeperError, UnexpectedSW12Error) as ex:
+                    except (SeedKeeperError, UnexpectedSW12Error, Exception) as ex:
+                        logger.warning('Exception during secret export: '+str(ex))#debug
                         secret= {  'error': str(ex) }
                         secrets_obj['secrets'].append(secret)
                         nb_errors+=1
@@ -1010,6 +1015,8 @@ class HandlerSimpleGUI:
         frame_layout2= [
                                     [sg.Text('Supported version (SeedKeeper): ', size=(20, 1)), sg.Text(sw_rel_seedkeeper)],
                                     [sg.Text('Supported version (Satochip): ', size=(20, 1)), sg.Text(sw_rel_satochip)],
+                                    [sg.Text('SeedKeeperTool version: ', size=(20, 1)), sg.Text(SEEDKEEPERTOOL_VERSION)],
+                                    [sg.Text('Pysatochip version: ', size=(20, 1)), sg.Text(PYSATOCHIP_VERSION)],
                                     [sg.Text(msg_status, justification='center', relief=sg.RELIEF_SUNKEN)]]
         frame_layout3= [[sg.Text(msg_copyright, justification='center', relief=sg.RELIEF_SUNKEN)]]
         layout = [[sg.Frame(self.client.cc.card_type, frame_layout1, font='Any 12', title_color='blue')],
@@ -1087,7 +1094,7 @@ class HandlerSimpleGUI:
         languages=['English', 'Français']
         layout = [
             [sg.Text('Select language: ', size=(15, 1)), sg.InputCombo(languages, key='lang', size=(25, 1), enable_events=True)],
-            [sg.Multiline(help_txt, key='help_txt', size=(60,10), visible=True)],
+            [sg.Multiline(help_txt, key='help_txt', size=(60,20), visible=True)],
             [sg.Button('Ok')]
         ]
         window = sg.Window("Help manual", layout, icon=self.satochip_icon).finalize()
@@ -1118,7 +1125,7 @@ class HandlerSimpleGUI:
                 [sg.Text('Export rights: ', size=(12, 1)), sg.InputCombo(('Export in plaintext allowed' , 'Export encrypted only'), key='export_rights', size=(25, 1))],
                 [sg.Text("")],
                 
-                [sg.Text("Do you want to create a new mnemonic, or to restore a wallet using an existing mnemonic?")],
+                [sg.Text("Do you want to create a new mnemonic, or import an existing mnemonic?")],
                 [sg.Radio('Create a new mnemonic', 'radio1', key='radio_create', default=False, enable_events=True)], 
                 [sg.Radio('I already have a mnemonic', 'radio1', key='radio_restore', default=False, enable_events=True)], 
                 [sg.Text('', size=(12, 1), key='mnemonic_prompt', visible=False), sg.Multiline(key='mnemonic', size=(40,3), visible=False, enable_events=True)], 
@@ -1138,7 +1145,7 @@ class HandlerSimpleGUI:
                 [sg.Text("", key='on_error', text_color='red' )],
             ]
             
-        window = sg.Window("Create or restore mnemonic", layout, icon=self.satochip_icon) 
+        window = sg.Window("Create or import mnemonic", layout, icon=self.satochip_icon) 
         
         def check_mnemonic(mnemonic_type, mnemonic):
             nonlocal values
