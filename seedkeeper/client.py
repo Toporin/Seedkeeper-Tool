@@ -260,7 +260,7 @@ class Client:
             # verify pin:
             try: 
                 self.cc.card_verify_PIN()
-            except RuntimeError as ex:
+            except Exception as ex:
                 logger.warning(repr(ex))
                 self.request('show_error', repr(ex))
                 return False
