@@ -134,9 +134,11 @@ Use -v flag for detailed logs in console.
 ## Build Linux AppImage
 
 Build docker image: 
+
     $ sudo docker build -t seedkeeper-appimage-builder-img contrib/build-linux/appimage
 
 Build AppImage:
+
     $ sudo docker run -it \
         --name seedkeeper-appimage-builder-cont \
         -v $PWD:/opt/electrum \
@@ -150,13 +152,16 @@ Build AppImage:
 Build Windows binaries from Linux & Docker.
 
 Export some variables:
+
     export GIT_REPO=(provide project folder path)
     export GIT_BRANCH=master
 
 Build docker image:
+
     sudo docker build -t seedkeeper-wine-builder-img contrib/build-wine
 
 Clone project:
+
     FRESH_CLONE=contrib/build-wine/fresh_clone && \
         sudo -E rm -rf $FRESH_CLONE && \
         mkdir -p $FRESH_CLONE && \
@@ -166,6 +171,7 @@ Clone project:
         git checkout $GIT_BRANCH
 
 Generate binaries:
+
     sudo docker run -it \
         --name seedkeeper-wine-builder-cont \
         -v $PWD:/opt/wine64/drive_c/electrum \
