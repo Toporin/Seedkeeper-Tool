@@ -44,8 +44,10 @@ while(True):
     event= handler.main_menu()
     logger.debug("Event: "+ str(event))
     
-    if event == 'Generate_new_seed':
-        client.generate_seed()    
+    # if event == 'Generate_new_seed':
+        # client.generate_seed()    
+    if event == 'generate_oncard':
+        client.generate_oncard()    
     elif  event == 'import_secret': 
         client.import_secret()
     elif event ==  'export_secret': 

@@ -23,6 +23,7 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 import os
+import sys
 import logging
 import math
 import hashlib
@@ -115,12 +116,6 @@ def randrange(bound: int) -> int:
     # hence transformations:
     return secrets.randbelow(bound - 1) + 1
 
-# absolute path to python package folder of electrum ("lib")
-pkg_dir = os.path.split(os.path.realpath(__file__))[0]
-
-def resource_path(*parts):
-    return os.path.join(pkg_dir, *parts)
-
 def hmac_oneshot(key: bytes, msg: bytes, digest) -> bytes:
     if hasattr(hmac, 'digest'):
         # requires python 3.7+; faster
@@ -175,7 +170,13 @@ class Wordlist(tuple):
 
     @classmethod
     def from_file(cls, filename) -> 'Wordlist':
-        path = resource_path('wordlist', filename)
+        
+        if getattr( sys, 'frozen', False ): # running in a bundle
+            pkg_dir= sys._MEIPASS # for pyinstaller
+        else : # running live
+            pkg_dir = os.path.split(os.path.realpath(__file__))[0]
+        path = os.path.join(pkg_dir, 'wordlist/'+filename)
+        
         if path not in _WORDLIST_CACHE:
             with open(path, 'r', encoding='utf-8') as f:
                 s = f.read().strip()

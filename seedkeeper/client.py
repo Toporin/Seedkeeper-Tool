@@ -5,7 +5,7 @@ from os import urandom
 # from queue import Queue #todo: remove
 # import threading #todo:remove
 
-from pysatochip.CardConnector import CardConnector, UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error
+from pysatochip.CardConnector import CardConnector, UninitializedSeedError, SeedKeeperError, UnexpectedSW12Error, CardError, CardNotPresentError
 from pysatochip.JCconstants import JCconstants
 from pysatochip.Satochip2FA import Satochip2FA
 from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCOL_MINOR_VERSION, SATOCHIP_PROTOCOL_VERSION
@@ -20,8 +20,8 @@ logger.setLevel(logging.DEBUG)
                
 class Client:
     
-    dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
-    
+    dic_type= {0x30:'BIP39 mnemonic', 0x40:'Electrum mnemonic', 0x10:'Masterseed', 0x70:'Public Key', 0x90:'Password', 0xA0:'Authentikey certificate', 0xB0:'2FA secret'}
+            
     def __init__(self, cc, handler, loglevel= logging.WARNING):
         logger.setLevel(loglevel)
         logger.debug("In __init__")
@@ -115,6 +115,51 @@ class Client:
             else:
                 return (True, oldpin, newpin)
     
+    def card_verify_authenticity(self):
+        logger.debug('In card_verify_authenticity')
+        # try:
+            # pubkey= self.cc.card_export_perso_pubkey()
+            # logger.debug('Device pubkey: '+ bytes(pubkey).hex())
+        # except CardException as ex:
+            # msg= ''.join(["Unable to verify card: feature unsupported! \n", 
+                                # "Authenticity validation is only available starting with Satochip v0.12 and higher"])
+            # self.handler.show_error(msg)
+            # break
+        # except UnexpectedSW12Error as ex:
+            # self.handler.show_error(str(ex))
+            # break
+        
+        # get certificate from device
+        cert_pem=txt_error=""
+        try:
+            cert_pem=self.cc.card_export_perso_certificate()
+            logger.debug('Cert PEM: '+ str(cert_pem))
+        except CardError as ex:
+            txt_error= ''.join(["Unable to get device certificate: feature unsupported! \n", 
+                                "Authenticity validation is only available starting with Satochip v0.12 and higher"])
+        except CardNotPresentError as ex:
+            txt_error= "No card found! Please insert card."
+        except UnexpectedSW12Error as ex:
+            txt_error= "Exception during device certificate export: " + str(ex)
+        
+        if cert_pem=="(empty)":
+            txt_error= "Device certificate is empty: the card has not been personalized!"
+        
+        if txt_error!="":
+            return False, "(empty)", "(empty)", "(empty)", txt_error
+        
+        # check the certificate chain from root CA to device
+        from pysatochip.certificate_validator import CertificateValidator
+        validator= CertificateValidator()
+        is_valid_chain, device_pubkey, txt_ca, txt_subca, txt_device, txt_error= validator.validate_certificate_chain(cert_pem, self.cc.card_type)
+        if not is_valid_chain:
+            return False, txt_ca, txt_subca, txt_device, txt_error
+        
+        # perform challenge-response with the card to ensure that the key is correctly loaded in the device
+        is_valid_chalresp, txt_error = self.cc.card_challenge_response_pki(device_pubkey)
+       
+        return is_valid_chalresp, txt_ca, txt_subca, txt_device, txt_error
+    
     ########################################
     #             Setup functions                              #
     ########################################
@@ -129,16 +174,41 @@ class Client:
             (response, sw1, sw2, d)=self.cc.card_get_status()
             
             # check version
-            if  (self.cc.setup_done):
-                #v_supported= CardConnector.SATOCHIP_PROTOCOL_VERSION 
+            if (self.cc.card_type=='Satochip'):
                 v_supported= SATOCHIP_PROTOCOL_VERSION 
                 v_applet= d["protocol_version"] 
-                logger.info(f"Satochip version={hex(v_applet)} Electrum supported version= {hex(v_supported)}")#debugSatochip
+                logger.info(f"Satochip version={v_applet} SeedKeeperTool supported version= {v_supported}")#debugSatochip
+                if (v_applet<12): # v0.12 is the minimum version supported by SeedKeeperTool
+                    msg=(('The version of your Satochip does not support SeedKeeperTool')+ '\n' 
+                                + f'    Satochip version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                + f'    Minimum supported version: 0.12')
+                    self.request('show_error', msg)
+                    #return False #?
+                elif (v_supported<v_applet):
+                    msg=(('The version of your Satochip is higher than supported by SeedKeeperTool. You should update SeedKeeperTool to ensure correct functioning!')+ '\n' 
+                                + f'    Satochip version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                + f'    Supported version: {SATOCHIP_PROTOCOL_MAJOR_VERSION}.{SATOCHIP_PROTOCOL_MINOR_VERSION}')
+                    self.request('show_error', msg)            
+            elif (self.cc.card_type=='SeedKeeper'):
+                v_supported= SEEDKEEPER_PROTOCOL_VERSION 
+                v_applet= d["protocol_version"] 
+                logger.info(f"SeedKeeper version={v_applet} SeedKeeperTool supported version= {v_supported}")#debugSatochip
                 if (v_supported<v_applet):
-                    msg=(('The version of your Satochip is higher than supported by SeedKeeper. You should update SeedKeeper to ensure correct functioning!')+ '\n' 
+                    msg=(('The version of your SeedKeeper is higher than supported by SeedKeeperTool. You should update SeedKeeperTool to ensure correct functioning!')+ '\n' 
                                 + f'    SeedKeeper version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
                                 + f'    Supported version: {SEEDKEEPER_PROTOCOL_MAJOR_VERSION}.{SEEDKEEPER_PROTOCOL_MINOR_VERSION}')
                     self.request('show_error', msg)
+            
+            if  (self.cc.setup_done):
+                #v_supported= CardConnector.SATOCHIP_PROTOCOL_VERSION 
+                # v_supported= SATOCHIP_PROTOCOL_VERSION 
+                # v_applet= d["protocol_version"] 
+                # logger.info(f"Satochip version={hex(v_applet)} Electrum supported version= {hex(v_supported)}")#debugSatochip
+                # if (v_supported<v_applet):
+                    # msg=(('The version of your Satochip is higher than supported by SeedKeeper. You should update SeedKeeper to ensure correct functioning!')+ '\n' 
+                                # + f'    SeedKeeper version: {d["protocol_major_version"]}.{d["protocol_minor_version"]}' + '\n' 
+                                # + f'    Supported version: {SEEDKEEPER_PROTOCOL_MAJOR_VERSION}.{SEEDKEEPER_PROTOCOL_MINOR_VERSION}')
+                    # self.request('show_error', msg)
                 
                 if (self.cc.needs_secure_channel):
                     self.cc.card_initiate_secure_channel() 
@@ -163,7 +233,7 @@ class Client:
                 ublk_tries_1= 0x01
                 pin_1= list(urandom(16)); #the second pin is not used currently
                 ublk_1= list(urandom(16));
-                secmemsize= 0x0000 # RFU
+                secmemsize= 32 #0x0000 # => for satochip - TODO: hardcode value?
                 memsize= 0x0000 # RFU
                 create_object_ACL= 0x01 # RFU
                 create_key_ACL= 0x01 # RFU
@@ -190,7 +260,7 @@ class Client:
             # verify pin:
             try: 
                 self.cc.card_verify_PIN()
-            except RuntimeError as ex:
+            except Exception as ex:
                 logger.warning(repr(ex))
                 self.request('show_error', repr(ex))
                 return False
@@ -202,6 +272,12 @@ class Client:
                 logger.warning(repr(ex))
                 self.request('show_error', repr(ex))
                 return False
+            
+            # TODO: option: get certificate & validation?
+            # try:
+                # self.certificate=self.cc.card_export_perso_certificate()
+            # except Exception as ex:
+                # self.certificate="(unsupported)"
             
             #card label 
             try:
@@ -229,9 +305,30 @@ class Client:
         # no card present 
         return False
         
-############################
-#    SEED WIZARD
-############################    
+    ############################
+    #    Secret on-card generation 
+    ############################  
+    
+    def generate_oncard(self):
+        event, values = self.handler.generate_oncard_menu()
+        if (event != 'Submit'):
+            return None
+        
+        try: 
+            stype= values['type'][0] # values['type']     
+            if stype== 'Masterseed':
+                self.generate_seed()
+            elif stype== '2FA Secret':
+                self.generate_2FA()
+            else:
+               #should not happen
+                logger.error(f'In import_secret: wrong type for import: {stype}')
+                return None
+        except Exception as ex:
+            logger.error(f"Error during secret on-card generation: {ex}")
+            self.handler.show_error(f"Error during secret on-card generation: {ex}")
+            return None 
+                
     def generate_seed(self):
         event, values = self.handler.generate_new_seed()
         
@@ -244,17 +341,44 @@ class Client:
             (response, sw1, sw2, id, fingerprint)= self.cc.seedkeeper_generate_masterseed(size, export_rights, label)
             
             if (sw1==0x90 and sw2==0x00):
-                self.handler.show_success(f'Seed generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
+                self.handler.show_success(f'Masterseed generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
             elif (sw1==0x9c and sw2==0x01):
-                self.handler.show_error(f'Error during seed generation: no memory available!')
+                self.handler.show_error(f'Error during Masterseed generation: no memory available!')
             elif (sw1==0x9c and sw2==0x04):
-                self.handler.show_error(f'Error during seed generation: SeedKeeper is not initialized!')
+                self.handler.show_error(f'Error during Masterseed generation: SeedKeeper is not initialized!')
             else:
-                self.handler.show_error(f'Unknown error: sw1={hex(sw1)} sw2={hex(sw2)}')
+                self.handler.show_error(f'Unknown error (error code {hex(256*sw1+sw2)})')
         else:
             #cancel or None
             return
     
+    def generate_2FA(self):
+        event, values = self.handler.generate_new_2FA_secret()
+        
+        if event== 'Submit':
+            logger.debug(values)
+            label= values['label']
+            export_rights= 0x01 if (values['export_rights']=='Export in plaintext allowed') else 0x02
+            
+            (response, sw1, sw2, id, fingerprint)= self.cc.seedkeeper_generate_2FA_secret(export_rights, label)
+            
+            if (sw1==0x90 and sw2==0x00):
+                self.handler.show_success(f'2FA secret generated with succes! \nId: {id} \nFingerprint: {fingerprint}')
+            elif (sw1==0x9c and sw2==0x01):
+                self.handler.show_error(f'Error during 2FA secret generation: no memory available!')
+            elif (sw1==0x9c and sw2==0x04):
+                self.handler.show_error(f'Error during 2FA secret generation: SeedKeeper is not initialized!')
+            elif (sw1==0x6D and sw2==0x00):
+                self.handler.show_error(f'Error during 2FA secret generation: operation not supported!')
+            else:
+                self.handler.show_error(f'Unknown error (error code {hex(256*sw1+sw2)})')
+        else:
+            #cancel or None
+            return
+    
+    ############################
+    #    Secret import 
+    ############################  
     def import_secret(self):
         
         event, values = self.handler.import_secret_menu()
@@ -278,30 +402,29 @@ class Client:
                     label= values['label']
                     export_rights= values['export_rights']
                     
-                    stype= 'Electrum seed' if mnemonic_type.startswith('Electrum') else 'BIP39 seed' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
-                    secret= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
+                    stype= 'Electrum mnemonic' if mnemonic_type.startswith('Electrum') else 'BIP39 mnemonic' # 'BIP39 mnemonic' , 'Electrum mnemonic (segwit)', 'Electrum mnemonic (non-segwit)'
+                    secret_list= [len(mnemonic_list)]+ mnemonic_list + [len(passphrase_list)] + passphrase_list
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     #self.handler.show_success(f"Secret successfully imported with id {sid}")
                     
                     # also import corresponding masterseed
                     masterseed_list= list( values['masterseed'] )
-                    secret= [len(masterseed_list)] + masterseed_list
-                    label= 'MasterSeed from mnemonic ' + values['label']
-                    header= self.make_header('MasterSeed', export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_list= [len(masterseed_list)] + masterseed_list
+                    label= "Masterseed from mnemonic '" + values['label'] +"'"
+                    header= self.make_header('Masterseed', export_rights, label)
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid2, fingerprint2) = self.cc.seedkeeper_import_secret(secret_dic)
-                    authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    self.handler.show_success(f"Mnemonic successfully imported with id {sid} & fingerprint {fingerprint} \nMasterseed successfully imported with id {sid2} & fingerprint {fingerprint2} \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Mnemonic successfully imported with id {sid} & fingerprint {fingerprint} \nMasterseed successfully imported with id {sid2} & fingerprint {fingerprint2}")
                     return 2
                 else: #Satochip
                     mnemonic_type= values['mnemonic_type']
                     if mnemonic_type.startswith('Electrum'):
                         message= '  '.join([
-                                    ("You are trying to import an Electrum seed to a Satochip hardware wallet."),
-                                    ("\nElectrum seeds are not compatible with the BIP39 seeds typically used in hardware wallets."), 
-                                    ("\nThis means you may have difficulty to import this seed in another wallet in the future."),
+                                    ("You are trying to import an Electrum mnemonic to a Satochip hardware wallet."),
+                                    ("\nElectrum mnemonics are not compatible with the BIP39 mnemonics typically used in hardware wallets."), 
+                                    ("\nThis means you may have difficulty to import this mnemonic in another wallet in the future."),
                                     ("\n\nAre you sure you want to continue? If you are not sure, click on 'no'. "),
                                 ])
                         yes_no= self.handler.yes_no_question(message)
@@ -312,13 +435,10 @@ class Client:
                     authentikey= self.cc.card_bip32_import_seed(masterseed_list)
                     if authentikey==None:
                         raise Exception("Error during mnemonic import: maybe the Satochip is already seeded.")
-                    authentikey_hex= authentikey.get_public_key_bytes(True).hex()
-                    authentikey_hex2= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    assert authentikey_hex==authentikey_hex2, f"Authentikey mismatch {authentikey_hex} {authentikey_hex2}"
-                    self.handler.show_success(f"Mnemonic successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Mnemonic successfully imported to Satochip!")
                     return 1
                     
-            elif stype== 'MasterSeed':
+            elif stype== 'Masterseed':
                 event, values= self.handler.import_secret_masterseed()
                 if event != 'Submit':
                     self.handler.show_message(f"Operation cancelled")
@@ -326,20 +446,16 @@ class Client:
                 masterseed= values['masterseed']
                 masterseed_list= list( bytes.fromhex(masterseed) )
                 if (self.cc.card_type=='SeedKeeper'):
-                    secret= [len(masterseed_list)] + masterseed_list
+                    secret_list= [len(masterseed_list)] + masterseed_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
-                    authentikey_hex= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    self.handler.show_success(f"Masterseed successfully imported with id {sid} & fingerprint {fingerprint} \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Masterseed successfully imported with id {sid} & fingerprint {fingerprint}")
                 else: #Satochip
                     authentikey= self.cc.card_bip32_import_seed(masterseed_list)
-                    authentikey_hex= authentikey.get_public_key_bytes(True).hex()
-                    authentikey_hex2= self.cc.get_authentikey_from_masterseed(masterseed_list)
-                    assert authentikey_hex==authentikey_hex2, f"Authentikey mismatch {authentikey_hex} {authentikey_hex2}"
-                    self.handler.show_success(f"Masterseed successfully imported to Satochip! \nCorresponding authentikey: {authentikey_hex}")
+                    self.handler.show_success(f"Masterseed successfully imported to Satochip!")
                 return 1
                     
             elif stype== 'Secure import from json':
@@ -361,11 +477,11 @@ class Client:
                 authentikey= values['pubkey']
                 authentikey_list= list( bytes.fromhex(authentikey) )
                 if (self.cc.card_type=='SeedKeeper'):
-                    secret= [len(authentikey_list)] + authentikey_list
+                    secret_list= [len(authentikey_list)] + authentikey_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Authentikey {authentikey} imported with id {sid} & fingerprint {fingerprint}")
                     return sid
@@ -379,11 +495,11 @@ class Client:
                 if event == 'Submit':
                     password= values['password']
                     password_list= list( password.encode('utf-8') )
-                    secret= [len(password_list)] + password_list
+                    secret_list= [len(password_list)] + password_list
                     label= values['label']
                     export_rights= values['export_rights']
                     header= self.make_header(stype, export_rights, label)
-                    secret_dic={'header':header, 'secret':secret}
+                    secret_dic={'header':header, 'secret_list':secret_list}
                     (sid, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                     self.handler.show_success(f"Secret successfully imported with id {sid} & fingerprint {fingerprint}")
                     return 1
@@ -400,25 +516,7 @@ class Client:
             logger.error(f"Error during secret import: {ex}")
             self.handler.show_error(f"Error during secret import: {ex}")
             return None
-            
-            
-    def make_header(self, stype, export_rights, label):
-        dic_type= {'BIP39 seed':0x30, 'Electrum seed':0x40, 'MasterSeed':0x10, 'Secure import from json':0x00, 
-                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90}
-        dic_export_rights={'Export in plaintext allowed':0x01 , 'Export encrypted only':0x02}
-        id=2*[0x00]
-        itype= dic_type[stype]
-        origin= 0x00
-        export= dic_export_rights[export_rights]
-        export_counters=3*[0x00]
-        fingerprint= 4*[0x00]
-        rfu=2*[0x00]
-        label_size= len(label)
-        label_list= list(label.encode('utf8'))
-        header_list= id + [itype, origin, export] + export_counters + fingerprint + rfu + [label_size] + label_list
-        header_hex= bytes(header_list).hex()
-        return header_hex
-     
+          
     def import_secure_secret(self):
         logger.debug("In import_secure_secret()") #debugSatochip
         
@@ -451,7 +549,7 @@ class Client:
             for header_dic in headers:
                 if header_dic['type']==0x70:
                     secret_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain
-                    pubkey= secret_dic['secret_hex'][2:]
+                    pubkey= secret_dic['secret'][2:] # [0:2] is the pubkey size in hex
                     if pubkey== authentikey_exporter:
                         sid_pubkey= header_dic['id']
                         logger.debug('Found sid_pubkey: ' + str(sid_pubkey) )
@@ -465,9 +563,9 @@ class Client:
                     yes_no= self.handler.yes_no_question(f"The following authentikey has been found in the TrustStore: \n\tAuthentikey: {authentikey_exporter_comp} \n\tLabel: '{card_label}' \nContinue import with this authentikey?")
                     if yes_no:
                         pubkey_list= list( bytes.fromhex(authentikey_exporter) )
-                        secret= [len(pubkey_list)] + pubkey_list
+                        secret_list= [len(pubkey_list)] + pubkey_list
                         header= self.make_header('Authentikey from TrustStore', 'Export in plaintext allowed', card_label+' authentikey')
-                        secret_dic={'header':header, 'secret':secret}
+                        secret_dic={'header':header, 'secret_list':secret_list}
                         (sid_pubkey, fingerprint) = self.cc.seedkeeper_import_secret(secret_dic)
                         self.handler.show_notification('Information: ', f"Authentikey '{card_label}' successfully imported with id {sid_pubkey}" )
                     else:
@@ -498,12 +596,7 @@ class Client:
                 self.handler.show_error(msg)
                 return None
         
-        else: # Satochip
-            # check if satochip is seeded:
-            if self.cc.is_seeded:
-                self.handler.show_error(f'Import aborted: Satochip is already Seeded!')
-                return None
-            
+        else: # Satochip         
             # check if authentikey_exporter is trusted
             authentikey_exporter=secret_json['authentikey_exporter']
             pubkey_hex= self.cc.card_export_trusted_pubkey()
@@ -532,40 +625,55 @@ class Client:
                 self.handler.show_error(f'Import aborted: the authentikey_exporter {authentikey_exporter[:66]} does not match the Satochip trusted_pubkey {pubkey_hex[:66]}!')
                 return None
             
-            # select MasterSeed from list (if any)
+            # select Masterseed/2FA from list (if any)
             index_list=[]
             masterseed_list=[]
+            secret_list=[]
             for index, secret_dic in enumerate(secret_json['secrets']):
                 (itype, stype, label, fingerprint)= self.parse_secret_header(secret_dic)
-                if (itype!=0x10):
+                if (itype==0x10):
+                    index_list.append(index)
+                    secret_list.append('Masterseed: ' + fingerprint + ': ' + label)
+                elif (itype==0xB0):
+                    index_list.append(index)
+                    secret_list.append('2FA secret: ' + fingerprint + ': ' + label)
+                else:
                     continue
-                index_list.append(index)
-                masterseed_list.append('MasterSeed: ' + fingerprint + ': ' + label)
             if ( len(index_list)==0 ):
-                self.handler.show_error(f'Import aborted: no MasterSeed found in json!')
+                self.handler.show_error(f'Import aborted: no Masterseed or 2FA found in json!')
                 return None
             else:
-                event2, values2 = self.handler.choose_masterseed_from_list(masterseed_list)
+                event2, values2 = self.handler.choose_secret_from_list(secret_list)
                 if event2=='Submit':
-                    index= index_list[ masterseed_list.index(values2['masterseed_list'][0]) ] #values2['masterseed_list'] is a list
+                    index= index_list[ secret_list.index(values2['secret_list'][0]) ] #values2['secret_list'] is a list
                 else:
                     self.handler.show_notification('Information: ', 'Secure import cancelled by user')
                     return None
                 
             # do the import
             secret_dic= secret_json['secrets'][index] 
+            (itype, stype, label, fingerprint)= self.parse_secret_header(secret_dic)
             try:
-                authentikey = self.cc.card_bip32_import_encrypted_seed(secret_dic)
-                authentikey_hex= authentikey.get_public_key_bytes(compressed=True).hex()
-                self.handler.show_success(f'Successfully imported masterseed to Satochip with authentikey: {authentikey_hex}')
-                return 1
+                if itype==0x10: #masterseed
+                    authentikey = self.cc.card_import_encrypted_secret(secret_dic)
+                    authentikey_hex= authentikey.get_public_key_bytes(compressed=True).hex()
+                    self.handler.show_success(f'Successfully imported masterseed to Satochip with authentikey: {authentikey_hex}')
+                    return 1
+                elif itype==0xB0: #2FA
+                    self.cc.card_import_encrypted_secret(secret_dic)
+                    self.handler.show_success(f'Successfully imported 2FA with fingerprint {fingerprint} to Satochip!')
+                    return 1
             except Exception as ex:
                 self.handler.show_error(str(ex))
                 return None
-        
+    
+    ############################
+    #    Utils
+    ############################  
+    
     def  get_secret_header_list(self):
         # get a list of all the secrets & pubkeys available
-        #dic_type= {0x30:'BIP39 seed', 0x40:'Electrum seed', 0x10:'MasterSeed', 0x70:'Public Key', 0x90:'Password'}
+        #dic_type= {0x30:'BIP39 mnemonic', 0x40:'Electrum mnemonic', 0x10:'Masterseed', 0x70:'Public Key', 0x90:'Password'}
         label_list=[]
         id_list=[]
         label_pubkey_list=['None (export to plaintext)']
@@ -578,7 +686,7 @@ class Client:
                 id_list.append( header_dic['id'] )
                 if header_dic['type']==0x70:
                     pubkey_dic= self.cc.seedkeeper_export_secret(header_dic['id'], None) #export pubkey in plain #todo: compressed form?
-                    pubkey= pubkey_dic['secret_hex'][2:10]
+                    pubkey= pubkey_dic['secret'][2:10] # [0:2] is the pubkey size in hex
                     label_pubkey_list.append('In SeedKeeper: ' + header_dic['fingerprint'] + ': '  + header_dic['label'] + ': ' + pubkey + '...')
                     id_pubkey_list.append( header_dic['id'] )
                     fingerprint_pubkey_list.append(header_dic['fingerprint'])
@@ -610,6 +718,24 @@ class Client:
                 authentikey_list.append(authentikey)
                
         return label_authentikey_list, authentikey_list
+    
+    #TODO: use pysatochip.cardConnector.make_header()
+    def make_header(self, stype, export_rights, label):
+        dic_type= {'BIP39 mnemonic':0x30, 'Electrum mnemonic':0x40, 'Masterseed':0x10, 'Secure import from json':0x00, 
+                                'Public Key':0x70, 'Authentikey from TrustStore':0x70, 'Password':0x90, 'Authentikey certificate':0xA0, '2FA secret':0xB0}
+        dic_export_rights={'Export in plaintext allowed':0x01 , 'Export encrypted only':0x02}
+        id=2*[0x00]
+        itype= dic_type[stype]
+        origin= 0x00
+        export= dic_export_rights[export_rights]
+        export_counters=3*[0x00]
+        fingerprint= 4*[0x00]
+        rfu=2*[0x00]
+        label_size= len(label)
+        label_list= list(label.encode('utf8'))
+        header_list= id + [itype, origin, export] + export_counters + fingerprint + rfu + [label_size] + label_list
+        header_hex= bytes(header_list).hex()
+        return header_hex
         
     def parse_secret_header(self, secret_dic):
         header_list= list(bytes.fromhex(secret_dic['header']))[2:] #first 2 bytes is sid
@@ -626,4 +752,3 @@ class Client:
 
         return itype, stype, label, fingerprint
     
-    # print("DEBUG END client.py ")
