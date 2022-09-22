@@ -1,23 +1,121 @@
 Introduction à SeedKeeper
-=====================
+===========================
 
-Qu'est-ce que SeedKeeper?
-------------------------------------------
+Qu'est-ce que SeedKeeper ?
+---------------------------
+SeedKeeper est une carte à puce qui peut être utilisé pour stocker en toute sécurité les 'seeds' et autres données sensibles pour une protection à long terme. 
 
+Traditionnellement, les utilisateurs de crypto-monnaies ont utilisé un simple stylo et du papier pour garder une copie de sauvegarde de leur seed hardware wallet. 
+Bien que cette méthode simple fonctionne relativement bien, elle présente également des inconvénients significatifs : 
+* Un morceau de papier peut être facilement perdu ou détruit.
+* La seed est généralement écrite en clair, puisque le cryptage n'est pas pratique (et comment stocker la clé de cryptage de toute façon ?).
 
-Quelqiues définitions
---------------------------------
+Une façon un peu plus sophistiquée de sécuriser la sauvegarde de votre seed a été mise au point sous la forme de plaques métalliques résistantes au feu et à l'eau.
+Mais l'utilisateur reste confronté à la difficulté de protéger les seeds des regards malveillants.
+Et le défi ne fait qu'empirer si vous voulez faire plusieurs sauvegardes...
 
-* Mnemonic:
-* Masterseed:
-* Authentikey:
+Avec un SeedKeeper, les seeds sont stockées dans la mémoire sécurisée de la carte à puce et ne peuvent être consultées que par leur propriétaire légitime à l'aide d'un code PIN secret court et facile à mémoriser. SeedKeeper est facile à utiliser mais puissant ; il est robuste mais abordable ; et enfin, il est complètement open-source. 
+SeedKeeper peut être utilisé de manière pratique en combinaison avec un porte-monnaie matériel Satochip pour servir de sauvegarde sécurisée. Et vous pouvez utiliser plusieurs sauvegardes SeedKeeper sans compromettre la sécurité !
 
-Comment utiliser votre SeedKeeper?
--------------------------------------------------------
+Quelques définitions
+---------------------
 
+Afin de clarifier les concepts, voici quelques termes qui seront utilisés tout au long de ce manuel :
 
-Comment utiliser votre SeedKeeper avec votre Satochip?
----------------------------------------------------------------------------------------
+* Code PIN : un mot de passe de 4 à 16 caractères utilisé pour déverrouiller un SeedKeeper ou un Satochip. Toute commande sensible nécessite de déverrouiller d'abord le dispositif PIN. Après avoir entré un mauvais code PIN plusieurs fois (typiquement 5), l'appareil se brique et ne peut plus être utilisé ! 
+* Seed : est le terme générique pour désigner les données secrètes qui sont utilisées pour configurer un portefeuille et accéder aux fonds. Une seed peut prendre la forme d'une liste mnémonique ou d'octets bruts (Masterseed).
+* Mnémonique : est une liste lisible par l'homme de 12 à 24 mots qui permet de générer ou de récupérer un porte-monnaie et de dépenser les fonds.
+* Masterseed : est un secret de 16 à 32 octets dérivé de la mnémonique. C'est cette valeur qui est finalement utilisée comme entrée dans le processus de dérivation du BIP32.
+* Authentikey : est une paire de clés publiques/privées à courbe elliptique qui est unique pour chaque appareil SeedKeeper (et Satochip) et qui peut être utilisée pour authentifier un appareil et initier une communication avec lui.
+* Secret 2FA : est un secret aléatoire de 20 octets qui peut être utilisé dans un Satochip comme authentification à second facteur. Si la fonction 2FA est activée, toutes les transactions doivent être approuvées sur un second appareil, tel qu'un smartphone.
+* Truststore : dans l'application SeedKeeperTool, le Truststore conserve une liste d'authentikeys pour chaque appareil SeedKeeper connecté jusqu'à présent. Le Truststore est effacé à la fermeture de l'application.
+* SeedKeeperTool : cette application permet de communiquer avec un SeedKeeper.
 
+Aperçu de SeedKeeper
+---------------------
 
+L'objectif principal d'un SeedKeeper est de stocker et de sauvegarder des seeds en toute sécurité. 
+De manière basique, voici les principales actions que vous pouvez effectuer sur une seed :
+* Importer une seed existante sur le SeedKeeper.
+* Générer un nouveau Mnenomic (aléatoire) avec l'outil SeedKeeperTool et le stocker dans le SeedKeeper.
+* Générer une nouvelle Masterseed (aléatoire) directement sur le SeedKeeper.
+* Exporter une seed stockée dans le SeedKeeper pour créer un nouveau portefeuille.
+
+Un SeedKeeper peut stocker plusieurs seeds dans sa mémoire sécurisée (le nombre exact dépend de leur taille, mais il peut dépasser plusieurs dizaines).
+Une étiquette peut être attachée à chaque seed stockée dans la mémoire sécurisée. Cela peut être utilisé, par exemple, pour fournir une courte description en moins de 128 caractères.
+
+Une seed peut être exportée de deux façons, comme défini lors de la création de la seed :
+* En texte clair : la seed est affichée en texte clair sur l'outil SeedKeeperTool et peut être copiée dans n'importe quel porte-monnaie.
+* Sous forme cryptée : la seed est cryptée pour un appareil spécifique sur base de l'authentikey, et ne peut être exportée que pour cet appareil spécifique.
+
+L'exportation sous forme cryptée est évidemment plus sûre et permet également le cryptage de bout en bout de la seed, où la seed est générée sur la carte dans un SeedKeeper puis exportée sous forme cryptée vers un nombre quelconque de dispositifs de sauvegarde et enfin vers un porte-monnaie matériel Satochip. Notez cependant que l'exportation cryptée ne fonctionne qu'avec des dispositifs compatibles (SeedKeeper et Satochip actuellement). Notez également que si une seed est marquée comme 'Exportation cryptée uniquement', elle ne peut pas être exportée en texte clair pour des raisons de sécurité !
+
+A des fins de sauvegarde, il est possible d'exporter tous les secrets stockés dans un SeedKeeper vers un autre SeedKeeper. La procédure est similaire à l'exportation d'une seed, sauf que tous les secrets sont exportés sous une forme cryptée. Un nombre arbitraire de sauvegarde peut être effectué de cette manière.
+
+Appariement sécurisé de SeedKeeper
+-----------------------------------
+
+L'appairage sécurisé permet à 2 appareils (SeedKeeper, Satochip ou tout autre appareil compatible à l'avenir) de s'authentifier mutuellement et de générer une clé secrète partagée pour communiquer en toute sécurité. Cela leur permettra d'échanger des seeds et d'autres données. Pour ce faire, les deux appareils doivent échanger leur clé d'authentification et stocker la clé d'authentification de l'autre appareil dans leur mémoire sécurisée. 
+Pour simplifier ce processus, chaque fois qu'une carte est insérée, son authentikey est demandée par l'outil SeedKeeperTool et stockée dans un tableau temporaire appelé Truststore. 
+Lorsqu'un utilisateur souhaite exporter une seed d'un appareil A vers un autre appareil B, il sélectionne l'authentikey de B dans l'option de menu "Exporter un secret". Après l'exportation, les données cryptées sont disponibles au format JSON.  
+
+Comment utiliser votre SeedKeeper ?
+------------------------------------
+
+Pour utiliser votre SeedKeeper, il suffit de connecter un lecteur de carte et d'y insérer le SeedKeeper, puis d'exécuter l'outil SeedKeeperTool sur votre ordinateur. Si vous êtes sous Linux, vous devrez peut-être installer le pilote de carte à puce si la carte n'est pas détectée (par exemple sous Ubuntu : "sudo apt install pcscd"). 
+Lors de la première utilisation, vous devrez initialiser la carte en définissant un code PIN et éventuellement une étiquette pour identifier la carte. Lors de la prochaine utilisation, vous devrez entrer votre code PIN afin d'utiliser votre SeedKeeper, donc assurez-vous de mémoriser ce PIN correctement !
+
+L'outil SeedKeeperTool offre le menu suivant :
+* Générer un nouveau Secret sur la carte : un nouveau Secret (Masterseed ou secret 2FA) est généré aléatoirement sur la carte. La Masterseed peut ensuite être utilisé pour initialiser un nouveau portefeuille ou activer le 2FA.
+
+* Importer un secret : voici le type de données sensibles qui peuvent être importées à partir du sous-menu : 
+** une phrase mnémonique (12-24 mots)
+** un Masterseed existant
+** une seed cryptée au format JSON
+** une authentikey provenant du Truststore (utilisée pour coupler 2 appareils)
+** une clé publique de confiance (également utilisée pour coupler 2 appareils, mais ne provenant pas du Truststore)
+** un mot de passe (un secret générique que vous souhaitez stocker en toute sécurité, par exemple le mot de passe principal d'une application de gestion des mots de passe).
+
+* Exporter un secret : exporter n'importe lequel des secrets stockés dans le SeedKeeper. 
+Dans le sous-menu, vous pouvez choisir le secret à exporter en fonction de son étiquette et de son empreinte digitale.
+Vous pouvez également choisir le type d'exportation : en texte clair (si autorisé) ou crypté en fonction des authentikeys disponibles pour l'appairage.
+ 
+* Faire une sauvegarde : permet d'exporter tous les secrets cryptés sur base de l'authentikey sélectionnée.
+
+* Liste des secrets : liste, pour chaque secret stocké dans le SeedKeeper, les informations suivantes :
+** Id : l'id du secret, un numéro unique.
+** Label : le label associé au secret
+** Type : peut être Masterseed, BIP39 mnemonic, Electrum mnemonic, Public Key (Authentikey), Password.
+** Origine : si le Secret a été généré sur la carte, ou importé en clair/chiffré.
+** Droits d'exportation : si le Secret peut être exporté en clair ou seulement en crypté.
+** Nb exports en clair : nombre de fois où le secret a été exporté en clair.
+** Nb exports chiffrés : le nombre de fois où le secret a été exporté chiffré.
+** Nb secret exporté : le nombre de secrets exportés avec cette authentikey (seulement pour le type Public Key).
+** Fingerprint : les 8 premiers caractères hexadécimaux du hash du secret, utilisés pour identifier de façon unique un secret. 
+
+* Obtenir les journaux : fournit un journal de chaque action sensible effectuée avec le SeedKeeper, y compris :
+** l'action effectuée telle que l'importation, l'exportation, l'opération PIN....
+** l'ID du ou des secrets concernés 
+** le résultat de l'opération : succès ou erreur.
+
+* A propos : fournit des informations de base sur les cartes et l'application :
+** Etiquette de la carte 
+** Version du micrologiciel installé sur la carte
+** Version du protocole du firmware supporté par l'application
+** Show Truststore : affiche le contenu du Truststore, c'est-à-dire les authentikeys des cartes insérées jusqu'à présent.
+** Vérifier la carte : permet d'authentifier l'émetteur de la carte à travers un certificat optionnellement chargé sur la carte pendant la personnalisation.
+
+* Aide : ce guide d'aide
+
+* Quitter : fermer l'application
+
+Comment utiliser SeedKeeper avec votre Satochip ?
+--------------------------------------------------
+
+Vous pouvez importer un mnémonique BIP39, un mnémonique Electrum ou une Masterseed brut dans un Satochip. 
+Notez qu'il n'est pas recommandé d'importer un mnémonique Electrum dans un portefeuille matériel (même si c'est possible) car il n'est pas standard et peut créer des problèmes de compatibilité.
+Un Mnémonique peut être importé en texte clair uniquement, en utilisant toute application supportant le Satochip pour l'importation (par exemple SeedKeeperTool, Electrum-Satochip, Electron Cash, Satochip-Bridge...).
+Un Masterseed peut être importé crypté en utilisant le SeedKeeperTool ('Import a Secret' > 'Secure import from json'). Dans ce cas, le Masterseed crypté peut être obtenu à partir du menu d'exportation après avoir couplé le SeedKeeper avec le Satochip.
+
+Vous pouvez importer une seed dans un Satochip en texte clair ou crypté. Il suffit d'insérer le Satochip et d'utiliser la même option de menu que pour l'importation de seeds dans un SeedKeeper (vous verrez que seules les options de menu disponibles pour un Satochip seront activées). Si la seed est en texte clair, vous pouvez utiliser n'importe quelle application supportant le Satochip pour l'importation (par exemple Electrum-Satochip, Electron Cash, Satochip-Bridge...).
 
