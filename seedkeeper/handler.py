@@ -32,8 +32,6 @@ except Exception as e:
     print('handler.py importError: '+repr(e))
     from . import electrum_mnemonic
     from .version import SEEDKEEPERTOOL_VERSION
-    #import seedkeeper.electrum_mnemonic
-    #from seedkeeper.version import SEEDKEEPERTOOL_VERSION
     
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -94,12 +92,8 @@ class HandlerSimpleGUI:
         logger.debug("PKGDIR= " + str(self.pkg_dir))
         self.satochip_icon= self.icon_path("satochip.png") #"satochip.png"
         self.satochip_unpaired_icon= self.icon_path("satochip_unpaired.png") #"satochip_unpaired.png"
-        logger.info('In __init__: satochip_icon path=' + self.satochip_icon)
+        logger.debug('satochip_icon path=' + self.satochip_icon)
 
-        # if self.client.cc.card_present:
-            # self.tray = sg.SystemTray(filename=self.satochip_icon) 
-        # else:
-            # self.tray = sg.SystemTray(filename=self.satochip_unpaired_icon) 
         if sys.platform == "darwin": #MacOS
             self.tray= None
         else:
@@ -113,7 +107,7 @@ class HandlerSimpleGUI:
     # CAUTION: update_status is called from another thread and in principle, no gui is allowed outside of the main thread
     def update_status(self, isConnected):
         logger.debug('In update_status')
-        self.client.card_event=True #trigger update of GUI 
+        self.client.card_event=True #trigger update of GUI from main thread
         #if (isConnected):
             #self.tray.update(filename=self.satochip_icon) #self.tray.update(filename=r'satochip.png')
         #else:
@@ -126,21 +120,11 @@ class HandlerSimpleGUI:
     def show_message(self, msg):
         sg.popup('Notification', msg, icon=self.satochip_icon)
     def show_notification(self, title, msg):
-        #logger.debug("START show_notification")
-        #self.tray.ShowMessage("Notification", msg, filename=self.satochip_icon, time=10000) #old
-        # self.tray.ShowMessage("Notification", msg, messageicon=sg.SYSTEM_TRAY_MESSAGE_ICON_INFORMATION, time=100000)
-        
+        logger.debug("START show_notification")
         if sys.platform == "darwin": #MacOS
             self.show_message(msg);  # toast message is not well supported on MacOS
         else:
             self.tray.ShowMessage(title, msg, time=100000)
-        #sg.popup_quick_message('popup_quick_message')
-        
-        #self.tray.notify(title, msg) # AttributeError: 'SystemTray' object has no attribute 'notify'
-        #sg.popup_notify(title, display_duration_in_ms=3000, fade_in_duration=1000, alpha=0.9, location=None) #nok
-        #sg.SystemTray.notify(title, msg) # AttributeError: type object 'SystemTray' has no attribute 'notify'
-        #sg.SystemTray.show_message(title=title, message=msg)
-        #logger.debug("END show_notification")
         
     def approve_action(self, question):
         logger.debug('In approve_action')
@@ -1105,7 +1089,7 @@ class HandlerSimpleGUI:
     def help_menu(self):
         logger.debug('In help_menu')
         path = os.path.join(self.pkg_dir, 'help/English.txt')
-        logger.info('In help_menu: path=' + path)
+        logger.debug('In help_menu: path=' + path)
         with open(path, 'r', encoding='utf-8') as f:
             help_txt = f.read().strip()
         

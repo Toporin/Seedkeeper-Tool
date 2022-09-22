@@ -5,10 +5,8 @@ set -e
 # Parameterize
 PYTHON_VERSION=3.9.11 # satochip-bridge
 #PYTHON_VERSION=3.7.9 # electrum
-#PYTHON_VERSION=3.10.6 # debug black screen
 BUILDDIR=/tmp/electrum-build
 PACKAGE=Electrum
-# GIT_REPO=https://github.com/spesmilo/electrum
 
 export GCC_STRIP_BINARIES="1"
 export PYTHONDONTWRITEBYTECODE=1  # don't create __pycache__/ folders with .pyc files
@@ -70,11 +68,14 @@ function DoCodeSignMaybe { # ARGS: infoName fileOrDirName
 }
 
 info "Installing Python $PYTHON_VERSION"
-#PKG_FILE="python-${PYTHON_VERSION}-macosx10.9.pkg"
-PKG_FILE="python-${PYTHON_VERSION}-macos11.pkg" # for python 3.10.x
+#PKG_FILE="python-${PYTHON_VERSION}-macosx10.9.pkg" # black screen issue
+PKG_FILE="python-${PYTHON_VERSION}-macos11.pkg" # solves black screen issue
 if [ ! -f "$CACHEDIR/$PKG_FILE" ]; then
     curl -o "$CACHEDIR/$PKG_FILE" "https://www.python.org/ftp/python/${PYTHON_VERSION}/$PKG_FILE"
 fi
+# python-3.9.11-macos11.pkg    
+echo "2437d2933a241464ef4ee91a8175a8a917c2cab5a74ce28d5163ecb29d731a2e  $CACHEDIR/$PKG_FILE" | shasum -a 256 -c \
+    || fail "python pkg checksum mismatched"
 # python 3.9.11
 #echo "c2073d44c404c661dadbf0cbda55c6e7d681baba9178ed1bdb126d34caa898a9  $CACHEDIR/$PKG_FILE" | shasum -a 256 -c \
 #     || fail "python pkg checksum mismatched"
@@ -99,22 +100,8 @@ rm -rf "$VENV_DIR"
 python3 -m venv $VENV_DIR
 source $VENV_DIR/bin/activate
 
-# info "Installing build dependencies"
-# python3 -m pip install --no-build-isolation --no-dependencies --no-warn-script-location \
-#     -Ir ./contrib/deterministic-build/requirements-build-base.txt \
-#     || fail "Could not install build dependencies (base)"
-# python3 -m pip install --no-build-isolation --no-dependencies --no-warn-script-location \
-#     -Ir ./contrib/deterministic-build/requirements-build-mac.txt \
-#     || fail "Could not install build dependencies (mac)"
-
 info "Installing some build-time deps for compilation..."
 brew install autoconf automake libtool gettext coreutils pkgconfig swig 
-
-# tkinter black screen issue
-# info "DEBUG tkinter black screen issue..."
-# brew info tcl-tk
-# brew install tcl-tk
-# brew info tcl-tk
 
 info "installing pip" #debug satochip
 python3 -m ensurepip
@@ -179,63 +166,6 @@ git submodule update --init
 rm  -rf "$BUILDDIR" > /dev/null 2>&1
 mkdir "$BUILDDIR"
 
-# info "generating locale"
-# (
-#     if ! which msgfmt > /dev/null 2>&1; then
-#         brew install gettext
-#         brew link --force gettext
-#     fi
-#     cd "$CONTRIB"/deterministic-build/electrum-locale
-#     # we want the binary to have only compiled (.mo) locale files; not source (.po) files
-#     rm -rf "$PROJECT_ROOT/electrum/locale/"
-#     for i in ./locale/*; do
-#         dir="$PROJECT_ROOT/electrum/$i/LC_MESSAGES"
-#         mkdir -p "$dir"
-#         msgfmt --output-file="$dir/electrum.mo" "$i/electrum.po" || true
-#     done
-# ) || fail "failed generating locale"
-
-
-# if [ ! -f "$PROJECT_ROOT"/electrum/libsecp256k1.0.dylib ]; then
-#     info "Building libsecp256k1 dylib..."
-#     "$CONTRIB"/make_libsecp256k1.sh || fail "Could not build libsecp"
-# else
-#     info "Skipping libsecp256k1 build: reusing already built dylib."
-# fi
-# cp "$PROJECT_ROOT"/electrum/libsecp256k1.0.dylib "$CONTRIB"/osx
-
-# if [ ! -f "$PROJECT_ROOT"/electrum/libzbar.0.dylib ]; then
-#     info "Building ZBar dylib..."
-#     "$CONTRIB"/make_zbar.sh || fail "Could not build ZBar dylib"
-# else
-#     info "Skipping ZBar build: reusing already built dylib."
-# fi
-# cp "$PROJECT_ROOT"/electrum/libzbar.0.dylib "$CONTRIB"/osx
-
-# if [ ! -f "$PROJECT_ROOT"/electrum/libusb-1.0.dylib ]; then
-#     info "Building libusb dylib..."
-#     "$CONTRIB"/make_libusb.sh || fail "Could not build libusb dylib"
-# else
-#     info "Skipping libusb build: reusing already built dylib."
-# fi
-# cp "$PROJECT_ROOT"/electrum/libusb-1.0.dylib "$CONTRIB"/osx
-
-
-# info "Installing requirements..."
-# python3 -m pip install --no-build-isolation --no-dependencies --no-warn-script-location \
-#     -Ir ./contrib/deterministic-build/requirements.txt \
-#     || fail "Could not install requirements"
-
-# info "Installing hardware wallet requirements..."
-# python3 -m pip install --no-build-isolation --no-dependencies --no-warn-script-location \
-#     -Ir ./contrib/deterministic-build/requirements-hw.txt \
-#     || fail "Could not install hardware wallet requirements"
-
-# info "Installing dependencies specific to binaries..."
-# python3 -m pip install --no-build-isolation --no-dependencies --no-warn-script-location \
-#     -Ir ./contrib/deterministic-build/requirements-binaries-mac.txt \
-#     || fail "Could not install dependencies specific to binaries"
-
 info "Building $PACKAGE..."
 python3 -m pip install --no-build-isolation --no-dependencies \
     --no-warn-script-location . > /dev/null || fail "Could not build $PACKAGE"
@@ -255,13 +185,6 @@ pyinstaller --noconfirm --ascii --clean --name $VERSION contrib/osx/osx.spec || 
 info "Building binary" # debug satochip
 # pyinstaller --noconfirm --ascii --clean --name $VERSION --additional-hooks-dir=. --hidden-import=eth_hash.backends.pycryptodome --add-data "./satochip_bridge/*.png:." --add-data "./satochip_bridge/api_keys.ini:." "./satochip_bridge/SatochipBridge.py" -i "./satochip_bridge/satochip.ico" 
 # wine "$PYHOME/scripts/pyinstaller.exe" -wF --clean --name SatochipBridge-v.exe --additional-hooks-dir=. --hidden-import=eth_hash.backends.pycryptodome --add-data "../../satochip_bridge/*.png;." --add-data "../../satochip_bridge/api_keys.ini;." "../../satochip_bridge/SatochipBridge.py" -i "../../satochip_bridge/satochip.ico" 
-
-
-# info "Adding bitcoin URI types to Info.plist"
-# plutil -insert 'CFBundleURLTypes' \
-#   -xml '<array><dict> <key>CFBundleURLName</key> <string>bitcoin</string> <key>CFBundleURLSchemes</key> <array><string>bitcoin</string><string>lightning</string></array> </dict></array>' \
-#   -- dist/$PACKAGE.app/Contents/Info.plist \
-#   || fail "Could not add keys to Info.plist. Make sure the program 'plutil' exists and is installed."
 
 DoCodeSignMaybe "app bundle" "dist/${PACKAGE}.app"
 

@@ -1,6 +1,8 @@
 Building macOS binaries
 =======================
 
+WARNING: the information in this document comes from the original Electrum project and is not up-to-date!
+
 ✓ _This binary should be reproducible, meaning you should be able to generate
    binaries that match the official releases._
 
