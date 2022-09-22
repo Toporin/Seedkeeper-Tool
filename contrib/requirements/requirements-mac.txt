@@ -1,0 +1,13 @@
+PyQRCode==1.2.1 
+pypng==0.0.20  
+mnemonic==0.19
+ecdsa==0.15
+pyscard==2.0.1
+pysatochip==0.12.3
+certifi
+
+# GUI
+PySimpleGUI==4.60.1
+#PySimpleGUIQt==0.31.0
+PySide2 #==5.12.6 #5.14.2 # <= 5.15.0
+#pillow == 8.0.1 #8.4.0

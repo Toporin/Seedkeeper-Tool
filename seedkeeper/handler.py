@@ -1,10 +1,14 @@
 #import PySimpleGUI as sg   
 #import PySimpleGUIWx as sg 
-import PySimpleGUIQt as sg 
-import base64  #todo:remove  
+#import PySimpleGUIQt as sg 
+import sys
+if sys.platform == "darwin": #MacOS
+    import PySimpleGUI as sg
+else:
+    import PySimpleGUIQt as sg
+import base64   
 import json
 import getpass
-import sys
 import os
 import logging
 #from queue import Queue #todo: remove
@@ -28,6 +32,8 @@ except Exception as e:
     print('handler.py importError: '+repr(e))
     from . import electrum_mnemonic
     from .version import SEEDKEEPERTOOL_VERSION
+    #import seedkeeper.electrum_mnemonic
+    #from seedkeeper.version import SEEDKEEPERTOOL_VERSION
     
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -77,19 +83,27 @@ class HandlerSimpleGUI:
         #self.pkg_dir = os.path.split(os.path.realpath(__file__))[0] # does not work with packaged .exe 
         if getattr( sys, 'frozen', False ):
             # running in a bundle
-            self.pkg_dir= sys._MEIPASS # for pyinstaller
+            #self.pkg_dir= sys._MEIPASS # for pyinstaller
+            if sys.platform == "darwin": #MacOS
+                self.pkg_dir= sys._MEIPASS + "/seedkeeper" # for pyinstaller
+            else:
+                self.pkg_dir= sys._MEIPASS # for pyinstaller
         else :
             # running live
             self.pkg_dir = os.path.split(os.path.realpath(__file__))[0]
         logger.debug("PKGDIR= " + str(self.pkg_dir))
         self.satochip_icon= self.icon_path("satochip.png") #"satochip.png"
         self.satochip_unpaired_icon= self.icon_path("satochip_unpaired.png") #"satochip_unpaired.png"
-        
+        logger.info('In __init__: satochip_icon path=' + self.satochip_icon)
+
         # if self.client.cc.card_present:
             # self.tray = sg.SystemTray(filename=self.satochip_icon) 
         # else:
             # self.tray = sg.SystemTray(filename=self.satochip_unpaired_icon) 
-        self.tray = sg.SystemTray(filename=self.satochip_icon) 
+        if sys.platform == "darwin": #MacOS
+            self.tray= None
+        else:
+            self.tray = sg.SystemTray(filename=self.satochip_icon) 
          
          
     def icon_path(self, icon_basename):
@@ -116,7 +130,10 @@ class HandlerSimpleGUI:
         #self.tray.ShowMessage("Notification", msg, filename=self.satochip_icon, time=10000) #old
         # self.tray.ShowMessage("Notification", msg, messageicon=sg.SYSTEM_TRAY_MESSAGE_ICON_INFORMATION, time=100000)
         
-        self.tray.ShowMessage(title, msg, time=100000)
+        if sys.platform == "darwin": #MacOS
+            self.show_message(msg);  # toast message is not well supported on MacOS
+        else:
+            self.tray.ShowMessage(title, msg, time=100000)
         #sg.popup_quick_message('popup_quick_message')
         
         #self.tray.notify(title, msg) # AttributeError: 'SystemTray' object has no attribute 'notify'
@@ -1088,12 +1105,13 @@ class HandlerSimpleGUI:
     def help_menu(self):
         logger.debug('In help_menu')
         path = os.path.join(self.pkg_dir, 'help/English.txt')
+        logger.info('In help_menu: path=' + path)
         with open(path, 'r', encoding='utf-8') as f:
             help_txt = f.read().strip()
         
         languages=['English', 'Français']
         layout = [
-            [sg.Text('Select language: ', size=(15, 1)), sg.InputCombo(languages, key='lang', size=(25, 1), enable_events=True)],
+            [sg.Text('Select language: ', size=(15, 1)), sg.InputCombo(languages, key='lang', size=(25, 1), default_value='English', enable_events=True)],
             [sg.Multiline(help_txt, key='help_txt', size=(60,20), visible=True)],
             [sg.Button('Ok')]
         ]
