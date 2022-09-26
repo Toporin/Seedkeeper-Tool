@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules, coll
 
 import sys, os
 
-PACKAGE='Electrum'
+PACKAGE='SeedKeeperTool'
 PYPKG='seedkeeper'
 MAIN_SCRIPT=PYPKG+ '/seedkeeper.py'
 ICONS_FILE=PYPKG + '/satochip.ico'
