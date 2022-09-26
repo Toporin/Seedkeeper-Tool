@@ -172,7 +172,11 @@ class Wordlist(tuple):
     def from_file(cls, filename) -> 'Wordlist':
         
         if getattr( sys, 'frozen', False ): # running in a bundle
-            pkg_dir= sys._MEIPASS # for pyinstaller
+            #pkg_dir= sys._MEIPASS # for pyinstaller
+            if sys.platform == "darwin": #MacOS
+                pkg_dir= sys._MEIPASS + "/seedkeeper" # for pyinstaller
+            else:
+                pkg_dir= sys._MEIPASS # for pyinstaller
         else : # running live
             pkg_dir = os.path.split(os.path.realpath(__file__))[0]
         path = os.path.join(pkg_dir, 'wordlist/'+filename)
