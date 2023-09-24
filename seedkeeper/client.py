@@ -433,7 +433,7 @@ class Client:
                             return 0
                     masterseed_list= list( values['masterseed'] )
                     authentikey= self.cc.card_bip32_import_seed(masterseed_list)
-                    if authentikey==None:
+                    if authentikey is None:
                         raise Exception("Error during mnemonic import: maybe the Satochip is already seeded.")
                     self.handler.show_success(f"Mnemonic successfully imported to Satochip!")
                     return 1
@@ -513,6 +513,7 @@ class Client:
                 #should not happen
                 logger.error(f'In import_secret: wrong type for import: {stype}')
                 return None
+
         except Exception as ex:
             logger.error(f"Error during secret import: {ex}")
             self.handler.show_error(f"Error during secret import: {ex}")
