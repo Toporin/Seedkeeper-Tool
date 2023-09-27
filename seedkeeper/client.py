@@ -324,6 +324,9 @@ class Client:
                #should not happen
                 logger.error(f'In import_secret: wrong type for import: {stype}')
                 return None
+        except IndexError:
+            logger.error(f"No Menu Item Selected")
+            self.handler.show_error(f"No Item Selected")
         except Exception as ex:
             logger.error(f"Error during secret on-card generation: {ex}")
             self.handler.show_error(f"Error during secret on-card generation: {ex}")
@@ -513,7 +516,9 @@ class Client:
                 #should not happen
                 logger.error(f'In import_secret: wrong type for import: {stype}')
                 return None
-
+        except IndexError:
+            logger.error(f"No Menu Item Selected")
+            self.handler.show_error(f"No Item Selected")
         except Exception as ex:
             logger.error(f"Error during secret import: {ex}")
             self.handler.show_error(f"Error during secret import: {ex}")
