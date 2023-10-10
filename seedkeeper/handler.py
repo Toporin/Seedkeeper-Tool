@@ -180,22 +180,75 @@ class HandlerSimpleGUI:
         is_data= True if event=='Submit' else False 
         data = values['data']
         return (is_data, data)
-     
+
+    # SeedQR Dialog, adapted from Seedsigner: https://github.com/SeedSigner/seedsigner/blob/dev/src/seedsigner/models/encode_qr.py
+    def SeedQRDialog(self, data, title = "SeedKeeperTool: CompactSeedQR code", msg= ''):
+        if "BIP39" in data and "Passphrase" not in data:
+            logger.debug('In CompactSeedQRDialog')
+            import pyqrcode
+            import math
+            from mnemonic import Mnemonic
+
+            mnemo = Mnemonic("english")
+            mnemonic = data.split(" ")[1:]
+
+            # Output as binary data format
+            binary_str = ""
+            for word in mnemonic:
+                index = mnemo.wordlist.index(word)
+
+                # Convert index to binary, strip out '0b' prefix; zero-pad to 11 bits
+                binary_str += bin(index).split('b')[1].zfill(11)
+
+            # We can exclude the checksum bits at the end
+            if len(mnemonic) == 24:
+                # 8 checksum bits in a 24-word seed
+                binary_str = binary_str[:-8]
+
+            elif len(mnemonic) == 12:
+                # 4 checksum bits in a 12-word seed
+                binary_str = binary_str[:-4]
+
+            # Now convert to bytes, 8 bits at a time
+            as_bytes = bytearray()
+            for i in range(0, math.ceil(len(binary_str) / 8)):
+                # int conversion reads byte data as a string prefixed with '0b'
+                as_bytes.append(int('0b' + binary_str[i * 8:(i + 1) * 8], 2))
+
+            # Must return data as `bytes` for `qrcode` to properly recognize it as byte data
+            qrdata = bytes(as_bytes)
+
+            seedqr = pyqrcode.create(qrdata, mode='binary', error='L', encoding='iso-8859-1')
+            image_as_str = seedqr.png_as_base64_str(scale=5, quiet_zone=2)
+            image_as_str= base64.b64decode(image_as_str) #bytes
+
+            layout = [[sg.Image(data=image_as_str, tooltip=None, visible=True)],
+                            [sg.Text(msg)],
+                            [sg.Button('Ok'), sg.Button('Cancel')]]
+            window = sg.Window(title, layout, icon=self.satochip_icon)
+            event, values = window.read()
+            window.close()
+            del window
+            return (event, values)
+
+        else:
+            sg.popup_error("SeedQR creation only supported for BIP39 seeds without a Passphrase")
+
     def QRDialog(self, data, title = "SeedKeeperTool: QR code", msg= ''):
         logger.debug('In QRDialog')
         import pyqrcode
         code = pyqrcode.create(data)
         image_as_str = code.png_as_base64_str(scale=5, quiet_zone=2) #string
         image_as_str= base64.b64decode(image_as_str) #bytes
-        
+
         layout = [[sg.Image(data=image_as_str, tooltip=None, visible=True)],
-                        [sg.Text(msg)],
-                        [sg.Button('Ok'), sg.Button('Cancel')]]     
-        window = sg.Window(title, layout, icon=self.satochip_icon)    
-        event, values = window.read()        
+                  [sg.Text(msg)],
+                  [sg.Button('Ok'), sg.Button('Cancel')]]
+        window = sg.Window(title, layout, icon=self.satochip_icon)
+        event, values = window.read()
         window.close()
         del window
-        return (event, values) 
+        return (event, values)
      
     def setup_card(self):
         logger.debug('In setup_card')
@@ -571,7 +624,7 @@ class HandlerSimpleGUI:
             [sg.Text('Type: ', size=(10, 1)), sg.Text(key='type')],
             [sg.Text('Origin: ', size=(10, 1)), sg.Text(key='origin')],
             [sg.Multiline(key='secret', size=(60, 4) )],
-            [sg.Button('Export', bind_return_key=True), sg.Button('Show QR Code', key='show_qr'), sg.Button('Close') ] # sg.Cancel()
+            [sg.Button('Export', bind_return_key=True), sg.Button('Show QR Code', key='show_qr'), sg.Button('Show SeedQR', key='show_seedqr'), sg.Button('Close') ] # sg.Cancel()
         ]   
         
         window = sg.Window('SeedKeeper export', layout, icon=self.satochip_icon)      
@@ -708,7 +761,17 @@ class HandlerSimpleGUI:
             
             elif event=='show_qr':
                 data= secret
-                self.QRDialog(data, title = "SeedKeeperTool: QR code", msg= '')
+                if len(data) > 0:
+                    self.QRDialog(data, title = "SeedKeeperTool: QR code", msg= '')
+                else:
+                    sg.popup_error('Export Secret before displaying QR')
+
+            elif event=='show_seedqr':
+                data= secret
+                if len(data) > 0:
+                    self.SeedQRDialog(data, title = "SeedKeeperTool: CompactSeedQR code", msg= '')
+                else:
+                    sg.popup_error('Export Secret before displaying QR')
             
             else:      
                 break      
