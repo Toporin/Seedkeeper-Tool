@@ -1,0 +1,75 @@
+
+name: Building SeedKeeper binaries
+
+
+on:
+  push:
+    tags: '*'
+    branches: [ * ]
+
+
+jobs:
+
+  build_win:
+
+    runs-on: windows-2022
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+        architecture: 'x64'
+    - name: Build bin package
+      run: |
+        cd package
+        ./Build-Windows.bat
+    - name: 'Archive windows bin (unsigned!)'
+      uses: actions/upload-artifact@v2
+      with:
+        name: windist-unsigned
+        path: |
+          dist/
+
+
+  build_linux:
+
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Prepare Linux system
+      run: |
+        sudo apt update
+        sudo apt install -y xvfb curl libnotify4 libgtk-3-0 libsdl2-2.0-0 libsdl2-dev libpcsclite-dev
+        sudo apt install -y python3-venv python3-pip python3-pyscard
+    - name: Build bin package
+      run: |
+        xvfb-run --server-args='-screen 0, 1024x768x24' bash package/Build-Linux.sh
+    - name: 'Archive linux bin (unsigned!)'
+      uses: actions/upload-artifact@v2
+      with:
+        name: nuxdist-unsigned
+        path: |
+          dist/
+
+
+  build_mac:
+
+    runs-on: macos-11
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    - name: Build bin package
+      run: |
+        ./package/Build-Mac.sh
+    - name: 'Archive MacOS bin (unsigned!)'
+      uses: actions/upload-artifact@v2
+      with:
+        name: macdist-unsigned
+        path: |
+          dist/
