@@ -5,7 +5,7 @@ name: Building SeedKeeper binaries
 on:
   push:
     tags: '*'
-    branches: [ * ]
+    branches: [ master, github* ]
 
 
 jobs:
