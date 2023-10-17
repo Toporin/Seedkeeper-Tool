@@ -324,6 +324,9 @@ class Client:
                #should not happen
                 logger.error(f'In import_secret: wrong type for import: {stype}')
                 return None
+        except IndexError:
+            logger.error(f"No Menu Item Selected")
+            self.handler.show_error(f"No Item Selected")
         except Exception as ex:
             logger.error(f"Error during secret on-card generation: {ex}")
             self.handler.show_error(f"Error during secret on-card generation: {ex}")
@@ -433,7 +436,7 @@ class Client:
                             return 0
                     masterseed_list= list( values['masterseed'] )
                     authentikey= self.cc.card_bip32_import_seed(masterseed_list)
-                    if authentikey==None:
+                    if authentikey is None:
                         raise Exception("Error during mnemonic import: maybe the Satochip is already seeded.")
                     self.handler.show_success(f"Mnemonic successfully imported to Satochip!")
                     return 1
@@ -464,6 +467,7 @@ class Client:
             elif stype== 'Trusted Pubkey' or stype=='Authentikey from TrustStore': #'Public Key':
                 if stype=='Trusted Pubkey':
                     event, values= self.handler.import_secret_pubkey()
+                    stype = 'Public Key' # Need to change stype to match the expected dict value
                 else: # stype=='Authentikey from TrustStore'
                     if len(self.truststore)==0:
                         self.handler.show_message(f"No Authentikey found in TrustStore.\nOperation cancelled!")
@@ -473,7 +477,7 @@ class Client:
                 if event != 'Submit':
                     self.handler.show_notification('Information: ', 'Operation cancelled by user')
                     return None
-                
+
                 authentikey= values['pubkey']
                 authentikey_list= list( bytes.fromhex(authentikey) )
                 if (self.cc.card_type=='SeedKeeper'):
@@ -512,6 +516,9 @@ class Client:
                 #should not happen
                 logger.error(f'In import_secret: wrong type for import: {stype}')
                 return None
+        except IndexError:
+            logger.error(f"No Menu Item Selected")
+            self.handler.show_error(f"No Item Selected")
         except Exception as ex:
             logger.error(f"Error during secret import: {ex}")
             self.handler.show_error(f"Error during secret import: {ex}")

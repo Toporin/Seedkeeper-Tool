@@ -18,3 +18,4 @@ contrib/build-windows/*.spec
 contrib/osx/.cache/
 contrib/osx/build-venv/
 SeedKeeper.egg-info
+.idea/
