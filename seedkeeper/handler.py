@@ -11,7 +11,8 @@ import json
 import getpass
 import os
 import logging
-#from queue import Queue #todo: remove
+import pyqrcode
+import math
 from mnemonic import Mnemonic
 
 from pysatochip.Satochip2FA import Satochip2FA
@@ -183,14 +184,20 @@ class HandlerSimpleGUI:
 
     # SeedQR Dialog, adapted from Seedsigner: https://github.com/SeedSigner/seedsigner/blob/dev/src/seedsigner/models/encode_qr.py
     def SeedQRDialog(self, data, title = "SeedKeeperTool: CompactSeedQR code", msg= ''):
-        if "BIP39" in data and "Passphrase" not in data:
+        if "BIP39" in data:
             logger.debug('In CompactSeedQRDialog')
-            import pyqrcode
-            import math
-            from mnemonic import Mnemonic
+
+            has_passphrase = False
+            # passphrase is entered directly in the device by hand
+            if "Passphrase" in data:
+                has_passphrase = True
+                data_list = data.split("\nPassphrase:", 1)
+                data = data_list[0]
+                passphrase = data_list[1]
+                msg_passphrase = "Passphrase to enter on the device: " + passphrase
 
             mnemo = Mnemonic("english")
-            mnemonic = data.split(" ")[1:]
+            mnemonic = data.split(" ")[1:] # remove "Bip39:" prefix
 
             # Output as binary data format
             binary_str = ""
@@ -209,6 +216,11 @@ class HandlerSimpleGUI:
                 # 4 checksum bits in a 12-word seed
                 binary_str = binary_str[:-4]
 
+            else:
+                # other length not supported?
+                self.show_error("SeedQR creation only supported for 12 & 24 words seeds")
+                return
+
             # Now convert to bytes, 8 bits at a time
             as_bytes = bytearray()
             for i in range(0, math.ceil(len(binary_str) / 8)):
@@ -224,6 +236,7 @@ class HandlerSimpleGUI:
 
             layout = [[sg.Image(data=image_as_str, tooltip=None, visible=True)],
                             [sg.Text(msg)],
+                            [sg.Text(msg_passphrase)] if has_passphrase else [],
                             [sg.Button('Ok'), sg.Button('Cancel')]]
             window = sg.Window(title, layout, icon=self.satochip_icon)
             event, values = window.read()
@@ -232,11 +245,10 @@ class HandlerSimpleGUI:
             return (event, values)
 
         else:
-            sg.popup_error("SeedQR creation only supported for BIP39 seeds without a Passphrase")
+            self.show_error("SeedQR creation only supported for BIP39 seeds")
 
     def QRDialog(self, data, title = "SeedKeeperTool: QR code", msg= ''):
         logger.debug('In QRDialog')
-        import pyqrcode
         code = pyqrcode.create(data)
         image_as_str = code.png_as_base64_str(scale=5, quiet_zone=2) #string
         image_as_str= base64.b64decode(image_as_str) #bytes
@@ -764,14 +776,14 @@ class HandlerSimpleGUI:
                 if len(data) > 0:
                     self.QRDialog(data, title = "SeedKeeperTool: QR code", msg= '')
                 else:
-                    sg.popup_error('Export Secret before displaying QR')
+                    self.show_error('Export Secret before displaying QR')
 
             elif event=='show_seedqr':
                 data= secret
                 if len(data) > 0:
                     self.SeedQRDialog(data, title = "SeedKeeperTool: CompactSeedQR code", msg= '')
                 else:
-                    sg.popup_error('Export Secret before displaying QR')
+                    self.show_error('Export Secret before displaying QR')
             
             else:      
                 break      
