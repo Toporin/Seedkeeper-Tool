@@ -1224,20 +1224,21 @@ class HandlerSimpleGUI:
             
         window = sg.Window("Create or import mnemonic", layout, icon=self.satochip_icon) 
         
-        def check_mnemonic(mnemonic_type, mnemonic):
-            nonlocal values
-            #logger.debug("Mnemonic: "+str(mnemonic))
+        def infer_mnemonic_type(mnemonic):
             # determine type if needed (e.g. for satochip layout)
-            if mnemonic_type=='unknown':
-                mnemonic_type= electrum_mnemonic.seed_type(mnemonic)
-                if mnemonic_type=='standard':
-                    mnemonic_type= 'Electrum mnemonic (non-segwit)'
-                elif mnemonic_type=='segwit':
-                    mnemonic_type= 'Electrum mnemonic (segwit)'
-                else:
-                    mnemonic_type= 'BIP39 mnemonic'
-                values['mnemonic_type']=mnemonic_type
+            nonlocal values
+            mnemonic_type= electrum_mnemonic.seed_type(mnemonic)
+            if mnemonic_type=='standard':
+                mnemonic_type= 'Electrum mnemonic (non-segwit)'
+            elif mnemonic_type=='segwit':
+                mnemonic_type= 'Electrum mnemonic (segwit)'
+            else:
+                mnemonic_type= 'BIP39 mnemonic'
             
+            values['mnemonic_type']=mnemonic_type
+            return mnemonic_type
+
+        def check_mnemonic(mnemonic_type, mnemonic):
             if (mnemonic_type == 'BIP39 mnemonic'):
                 if( not MNEMONIC.check(mnemonic) ):
                     window['on_error'].update(text_color='red' )
@@ -1313,7 +1314,7 @@ class HandlerSimpleGUI:
             
             elif event== 'mnemonic':
                 mnemonic= values['mnemonic']
-                mnemonic_type=  values.get('mnemonic_type', 'unknown')
+                mnemonic_type=  values.get('mnemonic_type', infer_mnemonic_type(mnemonic)) # infer mnemonic_type if not provided
                 check_mnemonic(mnemonic_type, mnemonic)
                 
             elif event=='Submit':
@@ -1322,15 +1323,16 @@ class HandlerSimpleGUI:
                     window['on_error'].update(text_color='red' )
                     window['on_error'].update('Label length should be strictly lower than 128!')
                     continue
-                # check mnemonic    
-                mnemonic_type=  values.get('mnemonic_type', 'unknown') # values['mnemonic_type']
+                # check mnemonic
                 mnemonic= values['mnemonic']
+                mnemonic_type=  values.get('mnemonic_type', infer_mnemonic_type(mnemonic)) # infer mnemonic_type if not provided
                 if use_passphrase:
                     passphrase= values['passphrase']
                 else:
                     passphrase= values['passphrase']=''
                 if check_mnemonic(mnemonic_type, mnemonic):
                     # also derive masterseed
+                    logger.debug(f"Derive masterseed for a mnemonic: {mnemonic_type}")
                     if mnemonic_type=='BIP39 mnemonic' :
                         values['masterseed']= Mnemonic.to_seed(mnemonic, passphrase)
                     else:  #electrum_mnemonic   
