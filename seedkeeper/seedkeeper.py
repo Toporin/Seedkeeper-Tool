@@ -17,6 +17,7 @@ from pysatochip.version import SATOCHIP_PROTOCOL_MAJOR_VERSION, SATOCHIP_PROTOCO
 try: 
     from client import Client
     from handler import HandlerSimpleGUI
+    from smartcard.pcsc.PCSCExceptions import EstablishContextException
 except Exception as e:
     print('seedkeeper importError: '+repr(e))
     from seedkeeper.client import Client
@@ -36,7 +37,14 @@ logger.warning("loglevel: "+ str(logger.getEffectiveLevel()) )
 #handler= HandlerTxt()
 handler= HandlerSimpleGUI(logger.getEffectiveLevel())
 client= Client(None, handler, logger.getEffectiveLevel())
-cc = CardConnector(client, logger.getEffectiveLevel())
+
+# Place this in a try/catch block to throw a helpful error if the smart card reader or service is inaccessible
+try:
+    cc = CardConnector(client, logger.getEffectiveLevel())
+except EstablishContextException:
+    handler.show_error("Unable to load Smart Card Reader Service\n\nEnsure that your Smart Card Reader is connected\nand enabled in your Operating System\n")
+    exit()
+
 time.sleep(1) # give some time to initialize reader...
 
 while(True):
