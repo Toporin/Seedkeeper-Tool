@@ -1,3 +1,5 @@
+**Warning: Seedkeeper-Tool has been deprecated as of November 2024. You should use the new [Satochip-Utils application](https://github.com/Toporin/Satochip-Utils) instead to easily manage and use your Satochip, Seedkeeper and Satodime cards.**
+
 # Seedkeeper-Tool
 
 Windows & Linux application for the [Seedkeeper secure vault](https://github.com/Toporin/Seedkeeper-Applet): store your most precious secrets, including seeds, masterseed and others inside a secure chip, protected by a PIN code.
